@@ -14,8 +14,9 @@
       * My old sketch Water has seen drastic aesthetic improvement compared to
       the version in FastLED's examples folder. TODO: actually port the new
       code to `Fx`.
-  * `fled` compiles some FastLED sketches into wasm, runs them in a browser and
-  shows the result on simulated LED strips/matrices.
+  * `fastled` command line tool compiles some FastLED sketches into wasm, runs
+  them in a browser and shows the result on simulated LED strips/matrices. It
+  displays buttons and sliders to control the sketch.
     * I got it running, along with the local compiler for best speed.
       * You get feedback a little faster than pushing a .bin via OTA.
       * Way faster build time & execution speed than [Wokwi](https://wokwi.com/),

@@ -5,20 +5,21 @@ const char* indexContent =
 R"raw_literal_html(
 <!DOCTYPE html>
 <html>
+<link rel="icon" href="favicon.ico" />
 <head>
-  <title>ESP32-S3 FastLED 4 Playpen</title>
+  <title>Playpen</title>
 </head>
 <body>
-  <h1>Control Panel</h1>
-  <button onclick="location.href='/restart'">Restart</button>
-  <button onclick="location.href='/telemetryon'">Serial telemetry on</button>
-  <button onclick="location.href='/telemetryoff'">Serial telemetry off</button>
-  <button onclick="location.href='/UDPtelemetryon'">UDP telemetry on</button>
-  <button onclick="location.href='/UDPtelemetryoff'">UDP telemetry off</button>
+  <h1>ESP32-S3 FastLED 4 Playpen</h1>
+  <button id="restart">Restart</button>
+  <button id="telemetryon">Serial telemetry on</button>
+  <button id="telemetryoff">Serial telemetry off</button>
+  <button id="UDPtelemetryon">UDP telemetry on</button>
+  <button id="UDPtelemetryoff">UDP telemetry off</button>
   <button id="updateButton">OTA Update</button>
-  <div id="response" style="border: 2px solid #4CAF50; padding: 10px; border-radius: 5px;"></div>
-  <div id="update" style="display:none; width:75%; height:650px; padding: 10px; border: 2px solid #4CAF50; border-radius: 5px;">
-  <iframe id="updateFrame">
+  <div id="responsediv"></div>
+  <div id="updatediv">
+  <iframe id="updateframe">
   </iframe></div>
 </body>
 </html>
@@ -33,10 +34,10 @@ R"raw_literal_css(
     padding: 0;
   }
   h1 {
-    color: #333;
+    color: #202020;
   }
   button {
-    background-color: #4CAF50;
+    background-color: #45a049;
     color: white;
     padding: 10px 20px;
     margin: 10px;
@@ -44,19 +45,36 @@ R"raw_literal_css(
     cursor: pointer;
   }
   button:hover {
-    background-color: #45a049;
+    background-color: #75d089;
   }
-  #response {
+  #responsediv {
+    transition: all 0.5s ease-in-out;
+    display: none;
     margin-top: 20px;
     font-size: 14px;
-    color: #333;
+    color: #000000;
     background-color: #e0e0e0;
     padding: 10px;
     border-radius: 5px;
-    border: 1px solid #ccc;
+    border: 2px solid #45a049;
+    width: 50%;
   }
-  #updateFrame {
-    margin-top: 20px;
+  #updatediv {
+    transition: all 0.5s ease-in-out;
+    display: none;
+    margin-top: 0px;
+    padding: 0px;
+    border: none;
+    width: 500px;
+    height: 700px;
+  }
+  #updateframe {
+    width: 100%;
+    height: 100%;
+    margin-top: 0px;
+    padding: 0px;
+    border-radius: 5px;
+    border: 2px solid #45a049;
   }
 </style>
 )raw_literal_css"
@@ -64,28 +82,40 @@ R"raw_literal_css(
 R"raw_literal_js(
 <script>
   function sendRequest(endpoint) {
+    const responseDiv = document.getElementById('responsediv');
+    function hideResponse() {
+      setTimeout(() => {
+        responseDiv.innerText = '';
+        responseDiv.style.display = 'none';
+      }, 1500);
+    }
+
     fetch(endpoint)
       .then(response => response.text())
       .then(data => {
-        console.log(data);
-        document.getElementById('response').innerText = 'Response from ' + endpoint + ': ' + data;
+        responseDiv.innerText = data;
+        responseDiv.style.display = 'block';
+        hideResponse();
       })
       .catch(error => console.error('Error:', error));
   }
 
   document.addEventListener('DOMContentLoaded', (event) => {
-    document.querySelector('button[onclick="location.href=\'/restart\'"]').onclick = () => sendRequest('/restart');
-    document.querySelector('button[onclick="location.href=\'/telemetryon\'"]').onclick = () => sendRequest('/telemetryon');
-    document.querySelector('button[onclick="location.href=\'/telemetryoff\'"]').onclick = () => sendRequest('/telemetryoff');
-    document.querySelector('button[onclick="location.href=\'/UDPtelemetryon\'"]').onclick = () => sendRequest('/UDPtelemetryon');
-    document.querySelector('button[onclick="location.href=\'/UDPtelemetryoff\'"]').onclick = () => sendRequest('/UDPtelemetryoff');
+    document.getElementById('restart').onclick = () => sendRequest('/restart');
+    document.getElementById('telemetryon').onclick = () => sendRequest('/telemetryon');
+    document.getElementById('telemetryoff').onclick = () => sendRequest('/telemetryoff');
+    document.getElementById('UDPtelemetryon').onclick = () => sendRequest('/UDPtelemetryon');
+    document.getElementById('UDPtelemetryoff').onclick = () => sendRequest('/UDPtelemetryoff');
     document.getElementById('updateButton').onclick = () => {
-      const iframe = document.getElementById('updateFrame');
-      if (iframe.style.display === 'none') {
-        iframe.style.display = 'block';
+      const updateDiv = document.getElementById('updatediv');
+      const iframe = document.getElementById('updateframe');
+      if (updateDiv.style.display != 'block') {
+        updateDiv.style.display = 'block';
         iframe.src = '/update';
       } else {
-        iframe.style.display = 'none';
+        updateDiv.style.display = 'none';
+        iframe.src = '';
+        iframe.innerHTML = '';
       }
     };
   });

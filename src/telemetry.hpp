@@ -1,7 +1,8 @@
 #pragma once
 
-#include "main.hpp"
+#include <deque>
 #include <map>
+#include "preferences.hpp"
 
 // Store Teleplot-compatible telemetry data, where each datum has it's own
 // sending interval. Periodically coalesce only changed values, and send them
@@ -19,6 +20,7 @@ struct Telemetry
     String unit;            // the unit of the value
     String teleplot;        // the teleplot configuration flags for this datum
     bool UDPonly;           // send only via UDP, never Serial
+    bool sanitise;          // replace : and | with Unicode characters
   };
 
   std::map<String, TelemetryDatum> telemetryData;
@@ -37,7 +39,8 @@ struct Telemetry
            String value = "",
            uint32_t intervalms = 1000,
            uint32_t maxIntervalms = 60000,
-           bool UDPonly = true)
+           bool UDPonly = false,
+           bool sanitise = true)
   {
     telemetryData[name] = TelemetryDatum {
         .lastSentms = 0,
@@ -47,18 +50,32 @@ struct Telemetry
         .unit = unit,
         .teleplot = teleplot,
         .UDPonly = UDPonly,
+        .sanitise = sanitise
     };
   }
 
-  void update(String name, String value, String unit = "",
-              String teleplot = "t,np", uint32_t intervalms = 1000,
-              uint32_t maxIntervalms = 60000, bool UDPonly = true)
+  void update(String name,
+              String value,
+              String unit = "",
+              String teleplot = "t,np",
+              uint32_t intervalms = 1000,
+              uint32_t maxIntervalms = 60000,
+              bool UDPonly = true,
+              bool sanitise = true)
   {
     auto datum = telemetryData.find(name);
     if (datum != telemetryData.end())
       datum->second.value = value;
     else
-      add(name, unit, teleplot, value, intervalms, maxIntervalms, UDPonly);
+      add(name, unit, teleplot, value, intervalms, maxIntervalms,
+          UDPonly, sanitise);
+  }
+
+  void sanitiseValue(String &value)
+  {
+    // Teleplot doesn't like : or | in values
+    value.replace(":", "﹕"); // U+FE55 SMALL COLON
+    value.replace("|", "｜"); // U+FF1C FULLWIDTH VERTICAL LINE
   }
 
   void send()
@@ -82,12 +99,18 @@ struct Telemetry
       }
       td.lastSentms = now;
       td.lastValue = td.value;
-      String report = kv.first + ":" + td.value;
+
+      String value = td.value;
+      if (td.sanitise)
+        sanitiseValue(value);
+      String report = kv.first + ":" + value;
+
       if (td.unit.length())
         report += "§" + td.unit;
       if (td.teleplot.length())
         report += "|" + td.teleplot;
       report += "\n";
+
       if (flags.serialTelemetry && !td.UDPonly)
         serialQueue.push_back(report);
       if (flags.UDPTelemetry)
@@ -102,19 +125,14 @@ struct Telemetry
     static size_t position{0};
     static String item{""};
 
-    if (! flags.serialTelemetry) {
-      serialQueue.clear();
-      return;
-    }
-
-    if (serialQueue.empty())
-      return;
-
     // Drop oldest entries if the queue gets too long
     while (serialQueue.size() > 10)
       serialQueue.pop_front();
 
-    unsigned int charsToSend = 16;
+    if (serialQueue.empty() || ! flags.serialTelemetry)
+      return;
+
+    unsigned int charsToSend = 8;
     while (charsToSend > 0)
     {
       if (item.isEmpty())
@@ -138,13 +156,14 @@ struct Telemetry
 
   void sendUDP()
   {
-    if (!flags.wifiConnected || !flags.UDPTelemetry || 0xffffffff == sock_addr.sin_addr.s_addr)
+    if (!flags.wifiConnected || !flags.UDPTelemetry
+        || 0xffffffff == sock_addr.sin_addr.s_addr)
     {
       UDPQueue.clear();
       return;
     }
 
-    if (UDPQueue.size() == 0)
+    if (0 == UDPQueue.size())
       return;
 
     // Create a UDP socket if it doesn't exist
@@ -217,6 +236,4 @@ struct Telemetry
     if (len <= 0)
       Serial.printf("sendto() failed: %d\n", len);
   }
-};
-
-Telemetry telemetry;
+} telemetry;

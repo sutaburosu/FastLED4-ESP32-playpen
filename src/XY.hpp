@@ -1,4 +1,7 @@
 #pragma once
+#include <fl/xymap.h>
+
+using namespace fl;
 
 /**
  * @enum XY_config_enum
@@ -62,6 +65,25 @@ uint16_t XY_panel(uint16_t x, uint16_t y, uint16_t w = 0, uint16_t h = 0)
     major = sz_major - 1 - major;
   return (uint16_t)(minor * sz_major + major);
 }
+template <const int config, const uint16_t width, const uint16_t height>
+uint16_t XY_panel_const(const uint16_t x, const uint16_t y,
+                  const uint16_t w = 0, const uint16_t h = 0)
+{
+  (void)w;
+  (void)h;
+  uint8_t major, minor, sz_major, sz_minor;
+  if (config & XY_ColumnMajor)
+    major = y, minor = x, sz_major = height, sz_minor = width;
+  else
+    major = x, minor = y, sz_major = width, sz_minor = height;
+  if (config & XY_FlipMinor)
+    minor = sz_minor - 1 - minor;
+  if ((config & XY_FlipMajor) ^ ((minor & 1) && (config & XY_Serpentine)))
+    major = sz_major - 1 - major;
+  return (uint16_t)(minor * sz_major + major);
+}
+
+
 
 /**
  * @brief Maps (x, y) coordinates to a linear index for multiple panels.
@@ -212,6 +234,7 @@ void benchmark_xymaps() {
   XYMap xyMapRectGrid = XYMap::constructRectangularGrid(64, 64);
   XYMap xyMapPanel = XYMap::constructWithUserFunction(64, 64, XY_panel<XY_CONFIG>);
   XYMap xyMapPanel_wh = XYMap::constructWithUserFunction(64, 64, XY_panel<XY_CONFIG, 64, 64>);
+  XYMap xyMapPanel_const = XYMap::constructWithUserFunction(64, 64, XY_panel_const<XY_CONFIG, 64, 64>);
   XYMap xyMapPanels = XYMap::constructWithUserFunction(64, 64, XY_panels<XY_CONFIG, 32, 32>);
   XYMap xyMapPanels_wh = XYMap::constructWithUserFunction(64, 64, XY_panels<XY_CONFIG, 64, 64, 32, 32>);
 
@@ -239,6 +262,13 @@ void benchmark_xymaps() {
       for (uint16_t x = 0; x < 64; x++)
         sum += xyMapPanel_wh(x, y);
   Serial.printf("MapPanel_wh\t%luus \tsum: %lu\r\n", micros() - us, sum);
+
+  us = micros(), sum = 0;
+  for (uint32_t i = 0; i < iterations; i++)
+    for (uint16_t y = 0; y < 64; y++)
+      for (uint16_t x = 0; x < 64; x++)
+        sum += xyMapPanel_const(x, y);
+  Serial.printf("MapPanel_const\t%luus \tsum: %lu\r\n", micros() - us, sum);
 
   us = micros(), sum = 0;
   for (uint32_t i = 0; i < iterations; i++)

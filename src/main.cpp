@@ -3,22 +3,11 @@
 */
 
 #define FASTLED_OVERCLOCK_SUPPRESS_WARNING
-// #define FASTLED_OVERCLOCK 1.42
-#define FASTLED_WS2812_T1 250
-#define FASTLED_WS2812_T2 500
-#define FASTLED_WS2812_T3 250
-// #define FASTLED_RMT5_RECYCLE 1
-// #define FASTLED_RMT5 0 // must be a build define
+#define FASTLED_OVERCLOCK 1.42
+// #define FASTLED_WS2812_T1 250
+// #define FASTLED_WS2812_T2 500
+// #define FASTLED_WS2812_T3 250
 
-#include "main.hpp"
-#include "LD2450.h"
-#include "wifi.hpp"
-#include "web_pages.hpp"
-#include "fxWater.hpp"
-
-using namespace fl;
-
-#define FIRST_ANIMATION RGB_BLOBS5
 #define BRIGHTNESS 48
 #define MATRIX_WIDTH 32
 #define MATRIX_HEIGHT 32
@@ -28,7 +17,18 @@ using namespace fl;
 #define PANEL_HEIGHT 16
 #define XY_CONFIG (XY_Serpentine | XY_ColumnMajor | XY_SerpentineTiling)
 
+#define FIRST_ANIMATION RGB_BLOBS5
+
+#include "preferences.hpp"
+#include "main.hpp"
 #include "XY.hpp"
+#include "LD2450.h"
+#include "wifi.hpp"
+#include "web_pages.hpp"
+#include "fxWater.hpp"
+
+using namespace fl;
+
 
 // select the multi-panel mapper only when it is required
 #if defined(PANEL_WIDTH) && defined(PANEL_HEIGHT) && ((PANEL_WIDTH != MATRIX_WIDTH) || (PANEL_HEIGHT != MATRIX_HEIGHT))
@@ -57,39 +57,11 @@ AsyncWebServer server(80);
 LD2450 ld2450;
 CRGB leds[NUM_LEDS + 1]; // + 1 for the onboard LED on pin 48
 
-void setPreferences()
-{
-  return; // comment out this line to set your preferences
-  preferences.putUInt("baudrate", 115200);
-  preferences.putBool("serialTelemetry", false);
-  preferences.putBool("UDPTelemetry", true);
-  preferences.putString("wifi_ssid", "your_ssid");
-  preferences.putString("wifi_password", "your_password");
-  preferences.putString("wifi_hostname", "esp32-s3-playpen");
-  preferences.putString("ntp_server1", "time.cloudflare.com");
-  preferences.putString("telemetry_host", "your_pc_ip_address");
-  // preferences.putUInt("telemetry_port", 47269); // if you change the default
-
-  // Find the string for your timezone here:
-  //   https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
-  String timezone = "GMT0BST,M3.5.0/1,M10.5.0"; // UK
-  // String timezone = "WET0WEST,M3.5.0/1,M10.5.0";     // Western Europe
-  // String timezone = "CET-1CEST,M3.5.0,M10.5.0/3";    // Central Europe
-  // String timezone = "EET-2EEST,M3.5.0/3,M10.5.0/4";  // Eastern Europe
-  // String timezone = "EST5EDT,M3.2.0,M11.1.0";        // US Eastern
-  // String timezone = "MST7MDT,M3.2.0,M11.1.0";        // US Mountain
-  // String timezone = "CST6CDT,M3.2.0,M11.1.0";        // US Central
-  // String timezone = "PST8PDT,M3.2.0,M11.1.0";        // US Pacific
-  preferences.putString("timezone", timezone);
-}
-
 void setup()
 {
-  preferences.begin("FastLED-playpen");
-  setPreferences();
+  setupPreferences();
 
   Serial.begin(preferences.getUInt("baudrate", 115200));
-  Serial.println("Boot");
   Serial.printf("Total PSRAM: %lu\n", ESP.getPsramSize());
   Serial.printf("Free PSRAM: %lu\n", ESP.getFreePsram());
   Serial.printf("Total heap: %lu\n", ESP.getHeapSize());
@@ -112,7 +84,6 @@ void setup()
 
   FastLED.setBrightness(BRIGHTNESS);
   FastLED.clear();
-  FastLED.show();
 
   fxEngine.addFx(animartrix);
   fxEngine.addFx(noisePalette1);
@@ -130,8 +101,8 @@ void setup()
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
             { request->send(200, "text/html", indexContent); });
   server.on("/restart", HTTP_GET, [](AsyncWebServerRequest *request)
-            { request->send(200, "text/plain", "Restarting...");
-              flags.restartPending = true; });
+            { flags.restartPending = true;
+              request->send(200, "text/plain", "Restarting..."); });
   server.on("/telemetryon", HTTP_GET, [](AsyncWebServerRequest *request)
             { flags.serialTelemetry = true;
               preferences.putBool("serialTelemetry", true);
@@ -191,11 +162,13 @@ void loop()
     if (switchFx)
     {
       fxEngine.nextFx(2000);
-      telemetry.update("FxId", String(fxEngine.getCurrentFxId()));
+      telemetry.update("FxId", String(fxEngine.getCurrentFxId()),
+                       "", "np", 1000, 60000, false);
       if (2 == fxEngine.getCurrentFxId())
       {
         animartrix.fxNext();
-        telemetry.update("AnimartrixFx", String(animartrix.fxGet()));
+        telemetry.update("AnimartrixFx", String(animartrix.fxGet()),
+                         "", "np", 1000, 60000, false);
       }
     }
   }
@@ -222,9 +195,9 @@ void loop()
   FastLED.show();
   us_total_show += micros();
 
-  // Send frame timing telemetry at most 4 times per second
+  // Send frame timing telemetry at most 5 times per second
   us_samples++;
-  if (micros() - us_start >= 250000)
+  if (micros() - us_start >= 200000)
   {
     telemetry.update("RSSI", String(WiFi.RSSI()), "dBm", "", 250);
     telemetry.update("draw", String(us_total_draw / us_samples), "µs", "", 250);

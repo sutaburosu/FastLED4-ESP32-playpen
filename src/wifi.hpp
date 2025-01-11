@@ -1,7 +1,7 @@
 #pragma once
 #include <WiFi.h>
 #include <esp_sntp.h>
-#include "main.hpp"
+#include "preferences.hpp"
 
 void ntp_setup();
 void dns_setup();
@@ -15,29 +15,33 @@ const char *wifiAuthModeName(wifi_auth_mode_t mode);
 
 void wifi_setup()
 {
-  // preferences.remove("wifi_ssid");
-  // preferences.remove("wifi_password");
-  // preferences.remove("wifi_hostname");
   if ((! preferences.isKey("wifi_ssid")) ||
       (! preferences.isKey("wifi_password")) ||
       (! preferences.isKey("wifi_hostname")))
   {
     auto oldtimeout = Serial.getTimeout();
-    Serial.setTimeout(120000);
+    Serial.setTimeout(45000);
     Serial.println("WiFi credentials not found in preferences\n"
                    "Please enter the following information to connect to your WiFi network.\n");
     Serial.print("Hostname: ");
     String hostname = Serial.readStringUntil('\n');
     hostname.trim();
+    if (!hostname.length()) {
+      Serial.setTimeout(oldtimeout);
+      return;
+    }
     Serial.println(hostname);
+
     Serial.print("AP SSID: ");
     String ssid = Serial.readStringUntil('\n');
     ssid.trim();
     Serial.println(ssid);
+
     Serial.print("Password: ");
     String password = Serial.readStringUntil('\n');
     password.trim();
     Serial.println(password);
+
     if (ssid.length() && password.length() && hostname.length())
     {
       Serial.println("Storing WiFi credentials to preferences");
@@ -69,8 +73,8 @@ void dns_setup()
   telemetry.update("IP address", WiFi.localIP().toString());
   telemetry.update("Gateway", WiFi.gatewayIP().toString());
   telemetry.update("Subnet", WiFi.subnetMask().toString());
-  telemetry.update("Primary DNS", WiFi.dnsIP().toString());
-  telemetry.update("Secondary DNS", WiFi.dnsIP(1).toString());
+  telemetry.update("DNS1", WiFi.dnsIP().toString());
+  telemetry.update("DNS2", WiFi.dnsIP(1).toString());
   telemetry.update("Hostname", String(WiFi.getHostname()));
   telemetry.update("MAC address", WiFi.macAddress());
 }
@@ -81,8 +85,10 @@ void dns_setup()
 #endif
 void ntp_setup()
 {
-  String ntp1 = preferences.getString("ntp_server1", NTP_SERVER1);
-  const char *ntp1_str = ntp1.c_str();
+  // String ntp1 = preferences.getString("ntp_server1", NTP_SERVER1);
+  // const char *ntp1_str = ntp1.c_str();
+  const char *ntp1_str{preferences.getString(
+                       "ntp_server1", NTP_SERVER1).c_str()};
   ip_addr_t ntp;
   // Check if the NTP server is an IPv4/6 address or hostname
   if (ip4addr_aton(ntp1_str, &ntp.u_addr.ip4))
@@ -125,12 +131,12 @@ void ntp_setup()
 
 void ntpCallback(timeval *tv)
 {
-  telemetry.update("NTP updated", timeString());
+  telemetry.update("NTP updated", timeString(), "", "t,np", 1000, 3600000, false);
 }
 
 void onOTAStart()
 {
-  telemetry.update("OTA progress", "0%");
+  telemetry.update("OTA progress", "0%", "", "t", 250);
   // brightness.setValue(4);
 }
 
