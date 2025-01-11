@@ -12,14 +12,27 @@
     * Built-in `Fx` effects can be easily be used in your own sketches.
     * Add your own effects to the `Fx` engine.
       * My old sketch Water has seen drastic aesthetic improvement compared to
-      the version in FastLED's examples folder. TODO: actually move the new
-      code into this repo.
+      the version in FastLED's examples folder. TODO: actually port the new
+      code to `Fx`.
   * `fled` compiles some FastLED sketches into wasm, runs them in a browser and
   shows the result on simulated LED strips/matrices.
-    * I got it running, along with the local compiler.
+    * I got it running, along with the local compiler for best speed.
       * You get feedback a little faster than pushing a .bin via OTA.
       * Way faster build time & execution speed than [Wokwi](https://wokwi.com/),
-      *if* your sketch works with it. 
+      *if* your sketch works with it.
+      * It's a cool project, but I don't find myself using it much.
+  * TODO: custom transitions between effects.
+    * It looks like only cross-fades/dissolves are supported currently.
+    * I want to try a few different transitions, like wipes/slides/zooms.
+      * Do I just sub-class Transition? How do I get Fx.next() to use it?
+      * Easing functions add flavour and variety to transitions. Are FastLED's
+      existing easing functions useful here? Enough resolution?
+  * TODO: frame interpolation. I *need* to play with this.
+    * time-stretching to smooth low-FPS CPU-intensive effects.
+      * is progressive rendering possible? e.g. render ¼ of the frame per
+      loop(), submit a complete frame every 4th loop(), and have the
+      interpolation engine fill in.
+    * time-stretching and bouncing/looping/glitching for artistic effect.
   * FastLED 3.9.10 glitches the RMT output when using Serial/WiFi.
     * Tried queueing and streaming Serial data at just a few bytes per loop().
     Still glitchy.
