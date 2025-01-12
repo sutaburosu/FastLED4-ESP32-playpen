@@ -2,7 +2,7 @@
 
 #include <deque>
 #include <map>
-#include <time.h> 
+#include <time.h>
 #include <lwip/sockets.h>
 #include <lwip/netdb.h>
 #include "preferences.hpp"
@@ -19,26 +19,26 @@ String timeString()
   return String(timeString);
 }
 
-
 // Store Teleplot-compatible telemetry data, where each datum has it's own
 // sending interval. Periodically coalesce only changed values, and send them
-// in chunks over Serial and/or UDP to Teleplot, or just a terminal or netcat 
+// in chunks over Serial and/or UDP to Teleplot, or just a terminal or netcat
 // (e.g. `nc -l -u -p 47269`).
+
+struct TelemetryDatum
+{
+  uint32_t sentMs = 0;    // when the last update was sent
+  uint32_t minMs = 1000;  // send changes no more frequently than this
+  uint32_t maxMs = 60000; // send at least this frequently (even if unchanged)
+  String value;           // current value
+  String lastValue;       // previous value that was sent
+  String unit;            // unit of the value
+  String teleplot = "";   // teleplot configuration flags
+  bool udpOnly = false;   // send only via UDP, never Serial
+  bool sanitise = true;   // replace : and | with Unicode characters
+};
+
 struct Telemetry
 {
-  struct TelemetryDatum
-  {
-    uint32_t sentMs;        // when the last update was sent
-    uint32_t intervalMs;    // send changes no more frequently than this
-    uint32_t maxIntervalMs; // send at least this frequently (even if unchanged)
-    String value;           // the current value
-    String lastValue;       // the previous value that was sent
-    String unit;            // the unit of the value
-    String teleplot;        // the teleplot configuration flags for this datum
-    bool udpOnly;           // send only via UDP, never Serial
-    bool sanitise;          // replace : and | with Unicode characters
-  };
-
   std::map<String, TelemetryDatum> telemetryData;
   std::deque<String> serialQueue;
   std::deque<String> udpQueue;
@@ -47,37 +47,38 @@ struct Telemetry
   struct sockaddr_in udpSockAddr; // the destination address for UDP telemetry
   uint32_t lastUDPsend = 0;       // when the last UDP telemetry was sent
 
-  // You don't need to add() a datum before update()ing it. If it needs custom
-  // intervals or Teleplot flags AND there are multiple places in your code
-  // where the same datum is updated, then it is better to add() it in setup()
-  // with all the arguments, and simply update("name", "value") everywhere else.
-  void add(String name,
-           String unit = "",
-           String teleplot = "np",
-           String value = "",
-           uint32_t intervalMs = 1000,
-           uint32_t maxIntervalMs = 60000,
-           bool udpOnly = false,
-           bool sanitise = true)
+  void log(String name, const TelemetryDatum &datum)
   {
-    telemetryData[name] = TelemetryDatum {
-        .sentMs = 0,
-        .intervalMs = intervalMs,
-        .maxIntervalMs = maxIntervalMs,
-        .value = value,
-        .unit = unit,
-        .teleplot = teleplot,
-        .udpOnly = udpOnly,
-        .sanitise = sanitise
-    };
+    auto it = telemetryData.find(name);
+    if (it == telemetryData.end())
+    {
+      telemetryData[name] = datum;
+      return;
+    }
+    it->second.value = datum.value;
+    it->second.unit = datum.unit;
+    it->second.teleplot = datum.teleplot;
+    it->second.minMs = datum.minMs;
+    it->second.maxMs = datum.maxMs;
+    it->second.udpOnly = datum.udpOnly;
+    it->second.sanitise = datum.sanitise;
+  }
+
+  void log(const String name, const String value)
+  {
+    auto it = telemetryData.find(name);
+    if (it == telemetryData.end())
+      telemetryData[name].value = value;
+    else
+      telemetryData[name] = TelemetryDatum{.value = value};
   }
 
   void update(String name,
               String value,
               String unit = "",
               String teleplot = "np",
-              uint32_t intervalMs = 1000,
-              uint32_t maxIntervalMs = 60000,
+              uint32_t minMs = 1000,
+              uint32_t maxMs = 60000,
               bool udpOnly = false,
               bool sanitise = true)
   {
@@ -85,8 +86,13 @@ struct Telemetry
     if (datum != telemetryData.end())
       datum->second.value = value;
     else
-      add(name, unit, teleplot, value, intervalMs, maxIntervalMs,
-          udpOnly, sanitise);
+      telemetryData[name] = TelemetryDatum{.minMs = minMs,
+                                           .maxMs = maxMs,
+                                           .value = value,
+                                           .unit = unit,
+                                           .teleplot = teleplot,
+                                           .udpOnly = udpOnly,
+                                           .sanitise = sanitise};
   }
 
   void sanitiseValue(String &value)
@@ -98,7 +104,8 @@ struct Telemetry
 
   void send()
   {
-    if (!flags.udpTelemetry && !flags.serialTelemetry) {
+    if (!flags.udpTelemetry && !flags.serialTelemetry)
+    {
       serialQueue.clear();
       udpQueue.clear();
       return;
@@ -109,8 +116,9 @@ struct Telemetry
     {
       TelemetryDatum &td = kv.second;
       uint32_t elapsed = now - td.sentMs;
-      if (elapsed < td.maxIntervalMs) {
-        if (elapsed < td.intervalMs)
+      if (elapsed < td.maxMs)
+      {
+        if (elapsed < td.minMs)
           continue;
         if (td.value == td.lastValue)
           continue;
@@ -147,7 +155,7 @@ struct Telemetry
     while (serialQueue.size() > 10)
       serialQueue.pop_front();
 
-    if (serialQueue.empty() || ! flags.serialTelemetry)
+    if (serialQueue.empty() || !flags.serialTelemetry)
       if (item.isEmpty())
         return;
 
@@ -175,8 +183,7 @@ struct Telemetry
 
   void sendUDP()
   {
-    if (!flags.wifiConnected || !flags.udpTelemetry
-        || 0xffffffff == udpSockAddr.sin_addr.s_addr)
+    if (!flags.wifiConnected || !flags.udpTelemetry || 0xffffffff == udpSockAddr.sin_addr.s_addr)
     {
       udpQueue.clear();
       return;
@@ -216,7 +223,7 @@ struct Telemetry
       if (1 != res)
       {
         // try to interpret as IPv6. Untested. I'm not sure if I'm doing this properly.
-        res = inet_pton(AF_INET6, host_cstr, &(((sockaddr_in6*)&udpSockAddr)->sin6_addr));
+        res = inet_pton(AF_INET6, host_cstr, &(((sockaddr_in6 *)&udpSockAddr)->sin6_addr));
         if (1 == res)
         {
           udpSockAddr.sin_family = AF_INET6;
@@ -263,7 +270,8 @@ struct Telemetry
                         0, (struct sockaddr *)&udpSockAddr, sizeof(udpSockAddr));
     if (len <= 0)
       Serial.printf("sendto() failed: %d\n", len);
-    else {
+    else
+    {
       static uint32_t udpBytes = 0;
       static uint32_t udpPackets = 0;
       static uint32_t udpReportms = 0;
@@ -271,7 +279,7 @@ struct Telemetry
       udpPackets++;
       if (!udpReportms)
         udpReportms = millis();
-      
+
       if (millis() - udpReportms > 3000)
       {
         uint32_t elapsed = millis() - udpReportms;
@@ -296,34 +304,50 @@ void sysStats()
 
   switch (selector)
   {
-    case 0:
-      if (flags.wifiConnected)
-        telemetry.update("RSSI", String(WiFi.RSSI()), "dBm", "");
-      break;
-    case 1:
-      telemetry.update("Heap Free", String(ESP.getFreeHeap() / 1024.f), "KiB", "", 1000, 5000);
-      break;
-    case 2:
-      telemetry.update("Heap Min", String(ESP.getMinFreeHeap() / 1024.f), "", "np", 1000, 5000);
-      break;
-    case 3:
-      telemetry.update("Heap Max", String(ESP.getMaxAllocHeap() / 1024.f), "", "np", 1000, 5000);
-      break;
-    case 4:
-      telemetry.update("PS Free", String(ESP.getFreePsram() / 1024.f), "KiB", "", 1000, 5000);
-      break;
-    case 5:
-      telemetry.update("PS Min", String(ESP.getMinFreePsram() / 1024.f), "", "np", 1000, 5000);
-      break;
-    case 6:
-      telemetry.update("PS Max", String(ESP.getMaxAllocPsram() / 1024.f), "", "np", 1000, 5000);
-      break;
-    case 7:
-      telemetry.update("Uptime", String(millis() / 3600000.f), "hours", "");
-      break;
-    case 8:
-      telemetry.update("Time", timeString(), "", "t,np");
-      break;
+  case 0:
+    if (flags.wifiConnected)
+      telemetry.log("RSSI", {.value = String(WiFi.RSSI()),
+                             .unit = "dBm"});
+    break;
+  case 1:
+    telemetry.log("Heap Free", {.maxMs = 5000,
+                                .value = String(ESP.getFreeHeap() / 1024.f),
+                                .unit = "KiB"});
+    break;
+  case 2:
+    telemetry.log("Heap Min", {.maxMs = 5000,
+                               .value = String(ESP.getMinFreeHeap() / 1024.f),
+                               .teleplot = "np"});
+    break;
+  case 3:
+    telemetry.log("Heap Max", {.maxMs = 5000,
+                               .value = String(ESP.getMaxAllocHeap() / 1024.f),
+                               .teleplot = "np"});
+    break;
+  case 4:
+    telemetry.log("PS Free", {.maxMs = 5000,
+                              .value = String(ESP.getFreePsram() / 1024.f),
+                              .unit = "KiB"});
+    break;
+  case 5:
+    telemetry.log("PS Min", {.maxMs = 5000,
+                             .value = String(ESP.getMinFreePsram() / 1024.f),
+                             .teleplot = "np"});
+    break;
+  case 6:
+    telemetry.log("PS Max", {.maxMs = 5000,
+                             .value = String(ESP.getMaxAllocPsram() / 1024.f),
+                             .teleplot = "np"});
+    break;
+  case 7:
+    telemetry.log("Uptime", {.value = String(millis() / 3600000.f),
+                             .unit = "hours",
+                             .teleplot = "np"});
+    break;
+  case 8:
+    telemetry.log("Time", {.value = timeString(),
+                           .teleplot = "t,np"});
+    break;
   }
   selector = (selector + 1) % statsCount;
 }

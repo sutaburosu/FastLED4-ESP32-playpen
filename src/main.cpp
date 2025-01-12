@@ -93,11 +93,15 @@ void loop()
     if (switchFx)
     {
       fxEngine.nextFx(2000);
-      telemetry.update("FxId", String(fxEngine.getCurrentFxId()), "", "np");
+      telemetry.log("FxId", {.minMs = 2000,
+                             .value = String(fxEngine.getCurrentFxId()),
+                             .teleplot = "np"});
       if (2 == fxEngine.getCurrentFxId())
       {
         animartrix.fxNext();
-        telemetry.update("AnimartrixFx", String(animartrix.fxGet()), "", "np");
+        telemetry.log("AnimartrixFx", {.minMs = 2000,
+                                       .value = String(animartrix.fxGet()),
+                                       .teleplot = "np"});
       }
     }
   }
@@ -137,11 +141,22 @@ void loop()
   if (micros() - µsStart >= 200000)
   {
     uint64_t other = (micros() - µsStart) - µsDraw - µsShow;
-    telemetry.update("draw", String(µsDraw / 1000.f / µsSamples), "ms", "", 250);
-    telemetry.update("show", String(µsShow / 1000.f / µsSamples), "ms", "", 250);
-    telemetry.update("nonFastLED", String(other / 1000.f / µsSamples), "ms", "", 250);
-    telemetry.update("fps", String(µsSamples * 1000000.f / (micros() - µsStart)),
-                     "Hz", "", 250);
+    telemetry.log("draw",
+                  {.minMs = 250,
+                   .value = String(µsDraw / 1000.f / µsSamples),
+                   .unit = "ms"});
+    telemetry.log("show",
+                  {.minMs = 250,
+                   .value = String(µsShow / 1000.f / µsSamples),
+                   .unit = "ms"});
+    telemetry.log("nonFastLED",
+                  {.minMs = 250,
+                   .value = String(other / 1000.f / µsSamples),
+                   .unit = "ms"});
+    telemetry.log("fps",
+                  {.minMs = 250,
+                   .value = String(µsSamples * 1000000.f / (micros() - µsStart)),
+                   .unit = "Hz"});
     µsSamples = µsShow = µsDraw = µsStart = 0;
   }
 

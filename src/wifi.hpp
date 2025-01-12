@@ -17,12 +17,11 @@ const char *wifiEventName(WiFiEvent_t event);
 const char *wifiAuthModeName(wifi_auth_mode_t mode);
 AsyncWebServer server(80);
 
-
 void setupWiFi()
 {
-  if ((! preferences.isKey("wifi_ssid")) ||
-      (! preferences.isKey("wifi_password")) ||
-      (! preferences.isKey("wifi_hostname")))
+  if ((!preferences.isKey("wifi_ssid")) ||
+      (!preferences.isKey("wifi_password")) ||
+      (!preferences.isKey("wifi_hostname")))
   {
     auto oldtimeout = Serial.getTimeout();
     Serial.setTimeout(45000);
@@ -31,7 +30,8 @@ void setupWiFi()
     Serial.print("Hostname: ");
     String hostname = Serial.readStringUntil('\n');
     hostname.trim();
-    if (!hostname.length()) {
+    if (!hostname.length())
+    {
       Serial.setTimeout(oldtimeout);
       return;
     }
@@ -68,13 +68,38 @@ void setupWiFi()
 // Log current network details
 void logNetworkDetails()
 {
-  telemetry.update("WiFi IP", WiFi.localIP().toString(), "", "t,np", 1000, 120000);
-  telemetry.update("WiFi Gateway", WiFi.gatewayIP().toString(), "", "t,np", 1000, 121100);
-  telemetry.update("WiFi Mask", WiFi.subnetMask().toString(), "", "t,np", 1000, 122200);
-  telemetry.update("WiFi DNS1", WiFi.dnsIP().toString(), "", "t,np", 1000, 123300);
-  telemetry.update("WiFi DNS2", WiFi.dnsIP(1).toString(), "", "t,np", 1000, 124400);
-  telemetry.update("WiFi Hostname", String(WiFi.getHostname()), "", "t,np", 1000, 125500);
-  telemetry.update("WiFi MAC", WiFi.macAddress(), "", "t,np", 1000, 126600);
+  telemetry.log("WiFi IP",
+                {.maxMs = 120000,
+                 .value = WiFi.localIP().toString(),
+                 .teleplot = "t,np"});
+  telemetry.log("WiFi Gateway",
+                {.maxMs = 121100,
+                 .value = WiFi.gatewayIP().toString(),
+                 .teleplot = "t,np"});
+  telemetry.log("WiFi Mask",
+                {.maxMs = 122200,
+                 .value = WiFi.subnetMask().toString(),
+                 .teleplot = "t,np"});
+  telemetry.log("WiFi DNS1",
+                {.maxMs = 123300,
+                 .value = WiFi.dnsIP().toString(),
+                 .teleplot = "t,np"});
+  telemetry.log("WiFi DNS2",
+                {.maxMs = 124400,
+                 .value = WiFi.dnsIP(1).toString(),
+                 .teleplot = "t,np"});
+  telemetry.log("WiFi Hostname",
+                {.maxMs = 125500,
+                 .value = String(WiFi.getHostname()),
+                 .teleplot = "t,np"});
+  telemetry.log("WiFi MAC",
+                {.maxMs = 126600,
+                 .value = WiFi.macAddress(),
+                 .teleplot = "t,np"});
+  telemetry.log("WiFi SSID",
+                {.maxMs = 127700,
+                 .value = WiFi.SSID(),
+                 .teleplot = "t,np"});
 }
 
 // Set NTP time sync and timezone
@@ -110,11 +135,15 @@ void ntpSetup()
   }
   const ip_addr_t *ntp_ip = esp_sntp_getserver(0);
   if (ntp_ip->type == IPADDR_TYPE_V4)
-    telemetry.update("NTP server", String(ipaddr_ntoa(ntp_ip)),
-                     "", "t,np", 1000, 900000, false);
+    telemetry.log("NTP server",
+                  {.maxMs = 900000,
+                   .value = String(ipaddr_ntoa(ntp_ip)),
+                   .teleplot = "t,np"});
   else if (ntp_ip->type == IPADDR_TYPE_V6)
-    telemetry.update("NTP server", String(ip6addr_ntoa(&ntp_ip->u_addr.ip6)),
-                     "", "t,np", 1000, 900000, false);
+    telemetry.log("NTP server",
+                  {.maxMs = 900000,
+                   .value = String(ip6addr_ntoa(&ntp_ip->u_addr.ip6)),
+                   .teleplot = "t,np"});
   esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
   sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED);
   sntp_set_sync_interval(900000); // 15 minutes
@@ -130,12 +159,18 @@ void ntpSetup()
 
 void ntpCallback(timeval *tv)
 {
-  telemetry.update("NTP updated", timeString(), "", "t,np", 1000, 909909, false);
+  telemetry.log("NTP updated",
+                {.maxMs = 909909,
+                 .value = timeString(),
+                 .teleplot = "t,np"});
 }
 
 void onOTAStart()
 {
-  telemetry.update("OTA progress", "0%", "", "t", 250, 908908);
+  telemetry.log("OTA progress", {.minMs = 250,
+                                 .maxMs = 908908,
+                                 .value = "0%",
+                                 .teleplot = "t"});
   // brightness.setValue(4);
 }
 
@@ -147,19 +182,20 @@ void onOTAProgress(size_t current, size_t final)
   if (new_percent != percent)
   {
     percent = new_percent;
-    telemetry.update("OTA progress", String(new_percent) + "%" + " of "
-                     + String(final) + " bytes");
+    telemetry.log("OTA progress", String(new_percent) + "%" + " of " +
+                                      String(final) + " bytes");
   }
 }
 
 void onOTAEnd(bool success)
 {
-  if (success) {
+  if (success)
+  {
     preferences.end();
-    telemetry.update("OTA progress", "100\% success");
+    telemetry.log("OTA progress", "100\% Success");
   }
   else
-    telemetry.update("OTA progress", "Failed");
+    telemetry.log("OTA progress", "Failed");
 }
 
 // React to, and print information about, a WiFi event
@@ -220,17 +256,17 @@ void wifiEvent(WiFiEvent_t event, WiFiEventInfo_t info)
     break;
   }
   Serial.printf("\n");
-  if (prev_wifi_connected != flags.wifiConnected) {
+  if (prev_wifi_connected != flags.wifiConnected)
+  {
     flags.doConnectActions = true;
     logNetworkDetails();
-    if (! flags.firstConnect) {
+    if (!flags.firstConnect)
+    {
       flags.firstConnect = true;
       ntpSetup();
     }
   }
 }
-
-
 
 // Return a pretty name for WiFiEvent_t
 const char *wifiEventName(WiFiEvent_t event)
@@ -309,4 +345,3 @@ const char *wifiAuthModeName(wifi_auth_mode_t mode)
     return "Unknown WiFi Auth Mode";
   }
 }
-
