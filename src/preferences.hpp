@@ -19,7 +19,7 @@ struct Flags
 // Your preferences will be saved in the NVS partition, so will persist
 // across reboots, firmware updates, and even flashing other sketches. They are
 // lost when the NVS partition is erased or the partition table layout changed.
-void storePreferences() {
+void preferencesStore() {
   // preferences.clear(); // uncomment this line to clear all stored preferences
 
   return; // comment out this line to set your preferences
@@ -47,12 +47,12 @@ void storePreferences() {
   preferences.putString("timezone", timezone);
 }
 
-void setupPreferences()
+void preferencesBegin()
 {
   preferences.begin("FastLED-playpen");
   flags.serialTelemetry = preferences.getBool("serialTelemetry", true);
   flags.udpTelemetry = preferences.getBool("udpTelemetry", false);
 
-  storePreferences();
+  preferencesStore();
 }
 

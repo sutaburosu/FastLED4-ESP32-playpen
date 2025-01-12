@@ -19,11 +19,7 @@ String timeString()
   return String(timeString);
 }
 
-// Store Teleplot-compatible telemetry data, where each datum has it's own
-// sending interval. Periodically coalesce only changed values, and send them
-// in chunks over Serial and/or UDP to Teleplot, or just a terminal or netcat
-// (e.g. `nc -l -u -p 47269`).
-
+// Holds the default values for a telemetry datum
 struct TelemetryDatum
 {
   uint32_t sentMs = 0;    // when the last update was sent
@@ -37,75 +33,59 @@ struct TelemetryDatum
   bool sanitise = true;   // replace : and | with Unicode characters
 };
 
+// Store Teleplot-compatible telemetry data, where each datum has it's own
+// sending interval. Periodically coalesce only changed values, and send them
+// in chunks over Serial and/or UDP to Teleplot, or just a terminal or netcat
+// (e.g. `nc -l -u -p 47269`).
 struct Telemetry
 {
   std::map<String, TelemetryDatum> telemetryData;
   std::deque<String> serialQueue;
   std::deque<String> udpQueue;
 
+  const int udpMaxPayload = 1024; // max payload size for UDP telemetry
   int udpSocket = -1;             // a socket for sending UDP telemetry
   struct sockaddr_in udpSockAddr; // the destination address for UDP telemetry
-  uint32_t lastUDPsend = 0;       // when the last UDP telemetry was sent
+  uint32_t udpSendMs = 0;         // when the last UDP telemetry was sent
 
-  // Add a telemetry datum, or update the value if it already exists
-  void log(String name, const TelemetryDatum &datum)
+  // Add a custom datum, or update the value if it already exists
+  void add(String name, const TelemetryDatum &datum)
   {
     auto it = telemetryData.find(name);
     if (it == telemetryData.end())
-      telemetryData[name] = datum;
+      telemetryData.emplace(name, datum);
     else
       it->second.value = datum.value;
   }
 
-  // Add a telemetry datum, or update the value if it already exists
-  void log(const String name, const String value)
+  // Add a default datum, or update the value if it already exists
+  void add(const String name, const String value)
   {
     auto it = telemetryData.find(name);
     if (it == telemetryData.end())
-      telemetryData[name].value = value;
+      telemetryData.emplace(name, TelemetryDatum{.value = value});
     else
-      telemetryData[name] = TelemetryDatum{.value = value};
+      it->second.value = value;
   }
 
-  void update(String name,
-              String value,
-              String unit = "",
-              String teleplot = "np",
-              uint32_t minMs = 1000,
-              uint32_t maxMs = 60000,
-              bool udpOnly = false,
-              bool sanitise = true)
-  {
-    auto datum = telemetryData.find(name);
-    if (datum != telemetryData.end())
-      datum->second.value = value;
-    else
-      telemetryData[name] = TelemetryDatum{.minMs = minMs,
-                                           .maxMs = maxMs,
-                                           .value = value,
-                                           .unit = unit,
-                                           .teleplot = teleplot,
-                                           .udpOnly = udpOnly,
-                                           .sanitise = sanitise};
-  }
-
+  // Teleplot doesn't like : or | in values
   void sanitiseValue(String &value)
   {
-    // Teleplot doesn't like : or | in values
     value.replace(":", "﹕"); // U+FE55 SMALL COLON
     value.replace("|", "｜"); // U+FF1C FULLWIDTH VERTICAL LINE
   }
 
-  void send()
+  // Every 200ms get changed values, format for Teleplot, and queue to be sent
+  bool coalesceChanges(uint32_t minMs = 200)
   {
-    if (!flags.udpTelemetry && !flags.serialTelemetry)
-    {
-      serialQueue.clear();
-      udpQueue.clear();
-      return;
-    }
-
+    static uint32_t lastCoalesce = 0;
+    bool changed = false;
     uint32_t now = millis();
+    if (now - lastCoalesce < minMs)
+      return changed;
+
+    String udpReports{""};
+    String serialReports{""};
     for (auto &kv : telemetryData)
     {
       TelemetryDatum &td = kv.second;
@@ -119,6 +99,7 @@ struct Telemetry
       }
       td.sentMs = now;
       td.lastValue = td.value;
+      changed = true;
 
       String value = td.value;
       if (td.sanitise)
@@ -131,11 +112,32 @@ struct Telemetry
         report += "|" + td.teleplot;
       report += "\n";
 
-      if (flags.serialTelemetry && !td.udpOnly)
-        serialQueue.push_back(report);
       if (flags.udpTelemetry)
-        udpQueue.push_back(report);
+        udpReports += report;
+      if (flags.serialTelemetry && !td.udpOnly)
+        serialReports += ">" + report;
+      if (udpReports.length() >= udpMaxPayload)
+        break;
     }
+
+    if (udpReports.length())
+      udpQueue.push_back(udpReports);
+    if (serialReports.length())
+      serialQueue.push_back(serialReports);
+
+    return changed;
+  }
+
+  void send()
+  {
+    if (!flags.udpTelemetry && !flags.serialTelemetry)
+    {
+      serialQueue.clear();
+      udpQueue.clear();
+      return;
+    }
+
+    coalesceChanges();
     sendUDP();
     sendSerial();
   }
@@ -153,20 +155,21 @@ struct Telemetry
       if (item.isEmpty())
         return;
 
-    unsigned int charsToSend = 8;
+    // fill the outgoing buffer to capacity
+    int charsToSend = Serial.availableForWrite();
     while (charsToSend > 0)
     {
       if (item.isEmpty())
       {
         if (serialQueue.empty())
           break;
-        // Prepend each entry with '>' for Teleplot over Serial
-        // Lines without '>' are logged in a different pane by Teleplot
-        item = ">" + serialQueue.front();
+        item = serialQueue.front();
         serialQueue.pop_front();
         position = 0;
       }
-      int chunkSize = min(charsToSend, item.length() - position);
+      int chunkSize = item.length() - position;
+      if (chunkSize > charsToSend)
+        chunkSize = charsToSend;
       Serial.print(item.substring(position, position + chunkSize));
       position += chunkSize;
       charsToSend -= chunkSize;
@@ -175,23 +178,24 @@ struct Telemetry
     }
   }
 
-  void sendUDP()
+  void sendUDP(uint32_t minMs = 200)
   {
-    if (!flags.wifiConnected || !flags.udpTelemetry || 0xffffffff == udpSockAddr.sin_addr.s_addr)
-    {
-      udpQueue.clear();
-      return;
-    }
-
     if (0 == udpQueue.size())
       return;
 
-    // Cap at 5 packets per second, to aid coalescing and reduce header overhead
-    if (!lastUDPsend)
-      lastUDPsend = millis();
-    if (millis() - lastUDPsend < 200)
+    if (!flags.wifiConnected || !flags.udpTelemetry || 0xffffffff == udpSockAddr.sin_addr.s_addr)
+    {
+      // Logging starts before WiFi connects. Queue startup stuff until connect
+      while (udpQueue.size() > 50)
+        udpQueue.pop_back(); // drop newest entries, to preserve boot messages
       return;
-    lastUDPsend = millis();
+    }
+
+    // Cap at 5 packets per second, to aid coalescing and reduce header overhead
+    if (!udpSendMs)
+      udpSendMs = millis();
+    if (millis() - udpSendMs < minMs)
+      return;
 
     // Create a UDP socket if it doesn't exist
     static int udpSocket = -1;
@@ -252,20 +256,23 @@ struct Telemetry
     while (udpQueue.size() > 0)
     {
       String entry = udpQueue.front();
-      if (telemetryPacket.length() + entry.length() > 1024 && telemetryPacket.length())
-        break;
+      if (telemetryPacket.length() + entry.length() > udpMaxPayload)
+        if (telemetryPacket.length())
+          break;
       udpQueue.pop_front();
       telemetryPacket += entry;
     }
 
     // Send the packet
+    udpSendMs = millis();
     const char *pkt_cstr = telemetryPacket.c_str();
     size_t len = sendto(udpSocket, pkt_cstr, telemetryPacket.length(),
                         0, (struct sockaddr *)&udpSockAddr, sizeof(udpSockAddr));
     if (len <= 0)
       return;
 
-    if (false) {  // send Telemetry bandwidth stats?
+    if (true)
+    { // send Telemetry bandwidth stats?
       static uint32_t udpBytes = 0;
       static uint32_t udpPackets = 0;
       static uint32_t udpReportms = 0;
@@ -277,70 +284,73 @@ struct Telemetry
       uint32_t elapsed = millis() - udpReportms;
       if (elapsed >= 5000)
       {
-        update("UDP bandwidth", String(udpBytes * 1000.f / elapsed), "B/s");
-        update("UDP packets", String(udpPackets * 1000.f / elapsed), "pkts/s");
-        // update("UDP avg size", String(udpBytes / udpPackets), "B");
+        add("UDP bandwidth", {.value = String(udpBytes * 1000.f / elapsed), .unit = "B/s"});
+        add("UDP packets", {.value = String(udpPackets * 1000.f / elapsed), .unit = "pkts/s"});
+        add("UDP avg size", {.value = String(udpBytes / udpPackets), .unit = "B"});
         udpReportms = millis();
         udpBytes = udpPackets = 0;
       }
     }
   }
-} telemetry;
 
-// Send some system statistics at most once per second each
-void sysStats()
-{
-  static uint32_t lastSysStats = 0;
-  static uint32_t selector = 0;
-  const int statsCount = 9;
-  if (millis() - lastSysStats < (1000 / statsCount))
-    return;
-  lastSysStats = millis();
-
-  switch (selector++)
+  void begin()
   {
-  case 0:
-    if (flags.wifiConnected)
-      telemetry.log("RSSI", {.value = String(WiFi.RSSI()),
-                             .unit = "dBm"});
-    break;
-  case 1:
-    telemetry.log("Heap Free", {.maxMs = 5005,
-                                .value = String(ESP.getFreeHeap() / 1024.f),
-                                .unit = "KiB",
-                                .teleplot = ""});
-    break;
-  case 2:
-    telemetry.log("Heap Min", {.maxMs = 5010,
-                               .value = String(ESP.getMinFreeHeap() / 1024.f)});
-    break;
-  case 3:
-    telemetry.log("Heap Max", {.maxMs = 5015,
-                               .value = String(ESP.getMaxAllocHeap() / 1024.f)});
-    break;
-  case 4:
-    telemetry.log("PS Free", {.maxMs = 5020,
-                              .value = String(ESP.getFreePsram() / 1024.f),
-                              .unit = "KiB",
-                              .teleplot = ""});
-    break;
-  case 5:
-    telemetry.log("PS Min", {.maxMs = 5025,
-                             .value = String(ESP.getMinFreePsram() / 1024.f)});
-    break;
-  case 6:
-    telemetry.log("PS Max", {.maxMs = 5030,
-                             .value = String(ESP.getMaxAllocPsram() / 1024.f)});
-    break;
-  case 7:
-    telemetry.log("Uptime", {.value = String(millis() / 3600000.f),
-                             .unit = "hours"});
-    break;
-  case 8:
-    telemetry.log("Time", {.value = timeString(),
-                           .teleplot = "t,np"});
-    break;
-  default:
-    selector = 0;
+    add("Heap Free", {.maxMs = 5000, .unit = "KiB", .teleplot = ""});
+    add("Heap Min", {.maxMs = 5000});
+    add("Heap Max", {.maxMs = 5000});
+    add("PS Free", {.maxMs = 5000, .unit = "KiB", .teleplot = ""});
+    add("PS Min", {.maxMs = 5000});
+    add("PS Max", {.maxMs = 5000});
+    add("Uptime", {.unit = "hours"});
+    add("Time", {.teleplot = "t,np"});
+    add("RSSI", {.unit = "dBm"});
   }
-}
+
+  // Send some system statistics at most once per second each
+  void sysStats()
+  {
+    static uint32_t lastSysStats = 0;
+    static uint32_t selector = 0;
+    const int statsCount = 9;
+
+    if (millis() - lastSysStats < (1000 / statsCount))
+      return;
+    lastSysStats = millis();
+
+    switch (selector++)
+    {
+    case 0:
+      add("Heap Free", String(ESP.getFreeHeap() / 1024.f));
+      break;
+    case 1:
+      add("Heap Min", String(ESP.getMinFreeHeap() / 1024.f));
+      break;
+    case 2:
+      add("Heap Max", String(ESP.getMaxAllocHeap() / 1024.f));
+      break;
+    case 3:
+      add("PS Free", String(ESP.getFreePsram() / 1024.f));
+      break;
+    case 4:
+      add("PS Min", String(ESP.getMinFreePsram() / 1024.f));
+      break;
+    case 5:
+      add("PS Max", String(ESP.getMaxAllocPsram() / 1024.f));
+      break;
+    case 6:
+      add("Uptime", String(millis() / 3600000.f));
+      break;
+    case 7:
+      add("Time", timeString());
+      break;
+    case 8:
+      if (flags.wifiConnected)
+        add("RSSI", String(WiFi.RSSI()));
+      break;
+    default:
+      selector = 0;
+    }
+  }
+};
+
+Telemetry telemetry;

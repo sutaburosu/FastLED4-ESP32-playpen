@@ -40,15 +40,20 @@ CRGB leds[NUM_LEDS + 1]; // + 1 for the onboard LED on pin 48
 
 void setup()
 {
+  preferencesBegin();
+  telemetry.begin();
+  Serial.begin(preferences.getUInt("baudrate", 115200));
+  Serial2.begin(LD2450_SERIAL_SPEED, SERIAL_8N1, 16, 17);
+  ld2450.begin(Serial2, true);
+  setupWiFi();
+  setupWebServer();
+
   // 4 x 256 LEDs in 16x16 serpentine with LED0 in bottom left and LED1 above it
   FastLED.addLeds<WS2812, 14, GRB>(leds, NUM_LEDS / 4);
   FastLED.addLeds<WS2812, 13, GRB>(leds, NUM_LEDS / 4, NUM_LEDS / 4);
   FastLED.addLeds<WS2812, 12, GRB>(leds, NUM_LEDS / 2, NUM_LEDS / 4);
   FastLED.addLeds<WS2812, 11, GRB>(leds, NUM_LEDS * 3 / 4, NUM_LEDS / 4);
   // FastLED.addLeds<WS2812, 48, GRB>(leds, NUM_LEDS, 1);
-
-  FastLED.setBrightness(BRIGHTNESS);
-  FastLED.clear();
 
   fxEngine.addFx(animartrix);
   fxEngine.addFx(noisePalette1);
@@ -58,20 +63,17 @@ void setup()
   noisePalette1.setScale(10);
   noisePalette2.setPalettePreset(4);
 
-  setupPreferences();
-
-  Serial.begin(preferences.getUInt("baudrate", 115200));
-  Serial2.begin(LD2450_SERIAL_SPEED, SERIAL_8N1, 16, 17);
-  ld2450.begin(Serial2, true);
-
-  benchmarkXYmaps();
-
-  setupWiFi();
-  setupWebServer();
+  // benchmarkXYmaps();
 
   // Confirm if radar reports are being received
   if (ld2450.read() < 4)
     Serial.printf("LD2450 radar active");
+
+  // Set custom parameters for a few telemetry data points
+  telemetry.add("draw", {.minMs = 100, .unit = "ms", .teleplot = ""});
+  telemetry.add("show", {.minMs = 100, .unit = "ms", .teleplot = ""});
+  telemetry.add("nonFastLED", {.minMs = 100, .unit = "ms", .teleplot = ""});
+  telemetry.add("fps", {.minMs = 100, .unit = "Hz", .teleplot = ""});
 }
 
 void draw() {
@@ -86,11 +88,11 @@ void draw() {
     {
       fxEngine.nextFx(2000);
       const auto fxId = fxEngine.getCurrentFxId();
-      telemetry.log("FxId", String(fxId));
+      telemetry.add("FxId", String(fxId));
       if (2 == fxId)
       {
         animartrix.fxNext();
-        telemetry.log("AnimartrixFx", String(animartrix.fxGet()));
+        telemetry.add("AnimartrixFx", String(animartrix.fxGet()));
       }
     }
   }
@@ -147,25 +149,15 @@ void loop()
   if (µsElapsed >= 200000)
   {
     uint64_t µsNonFastLED = µsElapsed - µsDraw - µsShow;
-    // These use similar, non-default settings
-    TelemetryDatum td = {.minMs = 200,
-                         .unit = "ms",
-                         .teleplot = ""};
-    td.value = String(µsDraw / divisor);
-    telemetry.log("draw", td);
-    td.value = String(µsShow / divisor);
-    telemetry.log("show", td);
-    td.value = String(µsNonFastLED / divisor);
-    telemetry.log("nonFastLED", td);
-    td.value = String(µsSamples * 1000000.f / µsElapsed);
-    td.unit = "Hz";
-    telemetry.log("fps", td);
+    telemetry.add("draw", String(µsDraw / divisor));
+    telemetry.add("show", String(µsShow / divisor));
+    telemetry.add("nonFastLED", String(µsNonFastLED / divisor));
+    telemetry.add("fps", String(µsSamples * 1000000.f / µsElapsed));
     µsSamples = µsShow = µsDraw = µsStart = 0;
 
     // Gather RAM usage, uptime, and WiFi signal data
-    sysStats();
-
-    // Send telemetry that has changed
-    telemetry.send();
+    telemetry.sysStats();
   }
+  // Send telemetry that has changed
+  telemetry.send();
 }

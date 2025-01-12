@@ -68,47 +68,44 @@ void setupWiFi()
 // Log current network details
 void logNetworkDetails()
 {
-  telemetry.log("WiFi IP",
+  telemetry.add("WiFi IP",
                 {.maxMs = 120000,
                  .value = WiFi.localIP().toString(),
                  .teleplot = "t,np"});
-  telemetry.log("WiFi Gateway",
+  telemetry.add("WiFi Gateway",
                 {.maxMs = 121100,
                  .value = WiFi.gatewayIP().toString(),
                  .teleplot = "t,np"});
-  telemetry.log("WiFi Mask",
+  telemetry.add("WiFi Mask",
                 {.maxMs = 122200,
                  .value = WiFi.subnetMask().toString(),
                  .teleplot = "t,np"});
-  telemetry.log("WiFi DNS1",
+  telemetry.add("WiFi DNS1",
                 {.maxMs = 123300,
                  .value = WiFi.dnsIP().toString(),
                  .teleplot = "t,np"});
-  telemetry.log("WiFi DNS2",
+  telemetry.add("WiFi DNS2",
                 {.maxMs = 124400,
                  .value = WiFi.dnsIP(1).toString(),
                  .teleplot = "t,np"});
-  telemetry.log("WiFi Hostname",
+  telemetry.add("WiFi Hostname",
                 {.maxMs = 125500,
                  .value = String(WiFi.getHostname()),
                  .teleplot = "t,np"});
-  telemetry.log("WiFi MAC",
+  telemetry.add("WiFi MAC",
                 {.maxMs = 126600,
                  .value = WiFi.macAddress(),
                  .teleplot = "t,np"});
-  telemetry.log("WiFi SSID",
+  telemetry.add("WiFi SSID",
                 {.maxMs = 127700,
                  .value = WiFi.SSID(),
                  .teleplot = "t,np"});
 }
 
 // Set NTP time sync and timezone
-#if !defined(NTP_SERVER1)
-#define NTP_SERVER1 "\"time.cloudflare.com\""
-#endif
 void ntpSetup()
 {
-  String ntp1 = preferences.getString("ntp_server1", NTP_SERVER1);
+  String ntp1 = preferences.getString("ntp_server1", "time.cloudflare.com");
   const char *ntp1_str = ntp1.c_str();
 
   ip_addr_t ntp;
@@ -135,12 +132,12 @@ void ntpSetup()
   }
   const ip_addr_t *ntp_ip = esp_sntp_getserver(0);
   if (ntp_ip->type == IPADDR_TYPE_V4)
-    telemetry.log("NTP server",
+    telemetry.add("NTP server",
                   {.maxMs = 900000,
                    .value = String(ipaddr_ntoa(ntp_ip)),
                    .teleplot = "t,np"});
   else if (ntp_ip->type == IPADDR_TYPE_V6)
-    telemetry.log("NTP server",
+    telemetry.add("NTP server",
                   {.maxMs = 900000,
                    .value = String(ip6addr_ntoa(&ntp_ip->u_addr.ip6)),
                    .teleplot = "t,np"});
@@ -159,7 +156,7 @@ void ntpSetup()
 
 void ntpCallback(timeval *tv)
 {
-  telemetry.log("NTP updated",
+  telemetry.add("NTP updated",
                 {.maxMs = 909909,
                  .value = timeString(),
                  .teleplot = "t,np"});
@@ -167,7 +164,7 @@ void ntpCallback(timeval *tv)
 
 void onOTAStart()
 {
-  telemetry.log("OTA progress", {.minMs = 250,
+  telemetry.add("OTA progress", {.minMs = 250,
                                  .maxMs = 908908,
                                  .value = "0%",
                                  .teleplot = "t"});
@@ -182,7 +179,7 @@ void onOTAProgress(size_t current, size_t final)
   if (new_percent != percent)
   {
     percent = new_percent;
-    telemetry.log("OTA progress", String(new_percent) + "%" + " of " +
+    telemetry.add("OTA progress", String(new_percent) + "%" + " of " +
                                       String(final) + " bytes");
   }
 }
@@ -192,10 +189,10 @@ void onOTAEnd(bool success)
   if (success)
   {
     preferences.end();
-    telemetry.log("OTA progress", "100\% Success");
+    telemetry.add("OTA progress", "100\% Success");
   }
   else
-    telemetry.log("OTA progress", "Failed");
+    telemetry.add("OTA progress", "Failed");
 }
 
 // React to, and print information about, a WiFi event
