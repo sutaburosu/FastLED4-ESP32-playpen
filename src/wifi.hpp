@@ -7,7 +7,7 @@
 #include "telemetry.hpp"
 
 void ntpSetup();
-void dnsSetup();
+void logNetworkDetails();
 void ntpCallback(timeval *tv);
 void onOTAStart();
 void onOTAProgress(size_t current, size_t final);
@@ -65,16 +65,16 @@ void setupWiFi()
              preferences.getString("wifi_password").c_str());
 }
 
-void dnsSetup()
+// Log current network details
+void logNetworkDetails()
 {
-  // Log current network details
-  telemetry.update("IP", WiFi.localIP().toString(), "", "t,np");
-  telemetry.update("Gateway", WiFi.gatewayIP().toString(), "", "t,np");
-  telemetry.update("Subnet", WiFi.subnetMask().toString(), "", "t,np");
-  telemetry.update("DNS1", WiFi.dnsIP().toString(), "", "t,np");
-  telemetry.update("DNS2", WiFi.dnsIP(1).toString(), "", "t,np");
-  telemetry.update("Hostname", String(WiFi.getHostname()), "", "t,np");
-  telemetry.update("MAC", WiFi.macAddress(), "", "t,np");
+  telemetry.update("WiFi IP", WiFi.localIP().toString(), "", "t,np", 1000, 120000);
+  telemetry.update("WiFi Gateway", WiFi.gatewayIP().toString(), "", "t,np", 1000, 121100);
+  telemetry.update("WiFi Mask", WiFi.subnetMask().toString(), "", "t,np", 1000, 122200);
+  telemetry.update("WiFi DNS1", WiFi.dnsIP().toString(), "", "t,np", 1000, 123300);
+  telemetry.update("WiFi DNS2", WiFi.dnsIP(1).toString(), "", "t,np", 1000, 124400);
+  telemetry.update("WiFi Hostname", String(WiFi.getHostname()), "", "t,np", 1000, 125500);
+  telemetry.update("WiFi MAC", WiFi.macAddress(), "", "t,np", 1000, 126600);
 }
 
 // Set NTP time sync and timezone
@@ -110,9 +110,11 @@ void ntpSetup()
   }
   const ip_addr_t *ntp_ip = esp_sntp_getserver(0);
   if (ntp_ip->type == IPADDR_TYPE_V4)
-    telemetry.update("NTP server", String(ipaddr_ntoa(ntp_ip)), "", "t,np");
+    telemetry.update("NTP server", String(ipaddr_ntoa(ntp_ip)),
+                     "", "t,np", 1000, 900000, false);
   else if (ntp_ip->type == IPADDR_TYPE_V6)
-    telemetry.update("NTP server", String(ip6addr_ntoa(&ntp_ip->u_addr.ip6)), "", "t,np");
+    telemetry.update("NTP server", String(ip6addr_ntoa(&ntp_ip->u_addr.ip6)),
+                     "", "t,np", 1000, 900000, false);
   esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
   sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED);
   sntp_set_sync_interval(900000); // 15 minutes
@@ -120,7 +122,7 @@ void ntpSetup()
   esp_sntp_init();
 
   // https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
-  String tz = preferences.getString("timezone", "GMT0BST,M3.5.0/1,M10.5.0");
+  String tz = preferences.getString("timezone", "GMT0");
   const char *tz_str = tz.c_str();
   setenv("TZ", tz_str, 1);
   tzset();
@@ -128,12 +130,12 @@ void ntpSetup()
 
 void ntpCallback(timeval *tv)
 {
-  telemetry.update("NTP updated", timeString(), "", "t,np", 1000, 900000, false);
+  telemetry.update("NTP updated", timeString(), "", "t,np", 1000, 909909, false);
 }
 
 void onOTAStart()
 {
-  telemetry.update("OTA progress", "0%", "", "t", 250);
+  telemetry.update("OTA progress", "0%", "", "t", 250, 908908);
   // brightness.setValue(4);
 }
 
@@ -220,9 +222,9 @@ void wifiEvent(WiFiEvent_t event, WiFiEventInfo_t info)
   Serial.printf("\n");
   if (prev_wifi_connected != flags.wifiConnected) {
     flags.doConnectActions = true;
+    logNetworkDetails();
     if (! flags.firstConnect) {
       flags.firstConnect = true;
-      dnsSetup();
       ntpSetup();
     }
   }

@@ -45,6 +45,7 @@ struct Telemetry
 
   int udpSocket = -1;             // a socket for sending UDP telemetry
   struct sockaddr_in udpSockAddr; // the destination address for UDP telemetry
+  uint32_t lastUDPsend = 0;       // when the last UDP telemetry was sent
 
   // You don't need to add() a datum before update()ing it. If it needs custom
   // intervals or Teleplot flags AND there are multiple places in your code
@@ -184,6 +185,13 @@ struct Telemetry
     if (0 == udpQueue.size())
       return;
 
+    // Cap at 5 packets per second, to aid coalescing and reduce header overhead
+    if (!lastUDPsend)
+      lastUDPsend = millis();
+    if (millis() - lastUDPsend < 200)
+      return;
+    lastUDPsend = millis();
+
     // Create a UDP socket if it doesn't exist
     static int udpSocket = -1;
     if (udpSocket < 0)
@@ -233,7 +241,9 @@ struct Telemetry
           }
         }
       }
-      Serial.printf("Sending telemetry to '%s' %s:%u\n", host_cstr, inet_ntoa(udpSockAddr.sin_addr.s_addr), udpSockAddr.sin_port);
+      Serial.printf("Sending telemetry to '%s' %s:%u\n", host_cstr,
+                    inet_ntoa(udpSockAddr.sin_addr.s_addr),
+                    ntohs(udpSockAddr.sin_port));
     }
 
     // Concatenate up to 1KiB of telemetry in 1 packet
@@ -288,25 +298,25 @@ void sysStats()
   {
     case 0:
       if (flags.wifiConnected)
-        telemetry.update("RSSI", String(WiFi.RSSI()));
+        telemetry.update("RSSI", String(WiFi.RSSI()), "dBm", "");
       break;
     case 1:
-      telemetry.update("Heap Free", String(ESP.getFreeHeap() / 1024.f), "KiB", "np");
+      telemetry.update("Heap Free", String(ESP.getFreeHeap() / 1024.f), "KiB", "", 1000, 5000);
       break;
     case 2:
-      telemetry.update("Heap Min", String(ESP.getMinFreeHeap() / 1024.f), "KiB", "");
+      telemetry.update("Heap Min", String(ESP.getMinFreeHeap() / 1024.f), "", "np", 1000, 5000);
       break;
     case 3:
-      telemetry.update("Heap MaxAlloc", String(ESP.getMaxAllocHeap() / 1024.f), "KiB", "np");
+      telemetry.update("Heap Max", String(ESP.getMaxAllocHeap() / 1024.f), "", "np", 1000, 5000);
       break;
     case 4:
-      telemetry.update("PS Free", String(ESP.getFreePsram() / 1024.f), "KiB", "np");
+      telemetry.update("PS Free", String(ESP.getFreePsram() / 1024.f), "KiB", "", 1000, 5000);
       break;
     case 5:
-      telemetry.update("PS Min", String(ESP.getMinFreePsram() / 1024.f), "KiB", "");
+      telemetry.update("PS Min", String(ESP.getMinFreePsram() / 1024.f), "", "np", 1000, 5000);
       break;
     case 6:
-      telemetry.update("PS MaxAlloc", String(ESP.getMaxAllocPsram() / 1024.f), "KiB", "np");
+      telemetry.update("PS Max", String(ESP.getMaxAllocPsram() / 1024.f), "", "np", 1000, 5000);
       break;
     case 7:
       telemetry.update("Uptime", String(millis() / 3600000.f), "hours", "");

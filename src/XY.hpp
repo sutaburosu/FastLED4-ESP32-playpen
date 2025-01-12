@@ -54,7 +54,7 @@ uint16_t XY_panel(uint16_t x, uint16_t y, uint16_t w = 0, uint16_t h = 0)
 {
   (void)w;
   (void)h;
-  uint8_t major, minor, sz_major, sz_minor;
+  uint16_t major, minor, sz_major, sz_minor;
   if (config & xyColumnMajor)
     major = y, minor = x, sz_major = height, sz_minor = width;
   else
@@ -65,13 +65,14 @@ uint16_t XY_panel(uint16_t x, uint16_t y, uint16_t w = 0, uint16_t h = 0)
     major = sz_major - 1 - major;
   return (uint16_t)(minor * sz_major + major);
 }
+
 template <const int config, const uint16_t width, const uint16_t height>
 uint16_t XY_panel_const(const uint16_t x, const uint16_t y,
                   const uint16_t w = 0, const uint16_t h = 0)
 {
   (void)w;
   (void)h;
-  uint8_t major, minor, sz_major, sz_minor;
+  uint16_t major, minor, sz_major, sz_minor;
   if (config & xyColumnMajor)
     major = y, minor = x, sz_major = height, sz_minor = width;
   else
@@ -160,7 +161,7 @@ uint16_t XY_panels(uint16_t x, uint16_t y, uint16_t w = 0, uint16_t h = 0)
 
 template <int config>
 uint16_t XY_panel(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
-  uint8_t major, minor, sz_major, sz_minor;
+  uint16_t major, minor, sz_major, sz_minor;
   if (config & xyColumnMajor)
     major = y, minor = x, sz_major = height, sz_minor = width;
   else
