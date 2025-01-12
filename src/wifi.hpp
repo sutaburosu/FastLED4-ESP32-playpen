@@ -110,9 +110,9 @@ void ntpSetup()
   }
   const ip_addr_t *ntp_ip = esp_sntp_getserver(0);
   if (ntp_ip->type == IPADDR_TYPE_V4)
-    telemetry.update("NTP server", String(ipaddr_ntoa(ntp_ip)));
+    telemetry.update("NTP server", String(ipaddr_ntoa(ntp_ip)), "", "t,np");
   else if (ntp_ip->type == IPADDR_TYPE_V6)
-    telemetry.update("NTP server", String(ip6addr_ntoa(&ntp_ip->u_addr.ip6)));
+    telemetry.update("NTP server", String(ip6addr_ntoa(&ntp_ip->u_addr.ip6)), "", "t,np");
   esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
   sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED);
   sntp_set_sync_interval(900000); // 15 minutes

@@ -266,30 +266,54 @@ struct Telemetry
       {
         uint32_t elapsed = millis() - udpReportms;
         udpReportms = millis();
-        update("Telemetry bandwidth", String(udpBytes * 1000.f / elapsed), "B/s", "np");
-        update("Telemetry packets", String(udpPackets * 1000.f / elapsed), "pkts/s", "np");
+        update("UDP bandwidth", String(udpBytes * 1000.f / elapsed), "B/s", "np");
+        update("UDP packets", String(udpPackets * 1000.f / elapsed), "pkts/s", "np");
         udpBytes = udpPackets = 0;
       }
     }
   }
 } telemetry;
 
-// Send some system statistics at most once per second
+// Send some system statistics at most once per second each
 void sysStats()
 {
   static uint32_t lastSysStats = 0;
-  if (millis() - lastSysStats < 1000)
+  static uint32_t selector = 0;
+  const int statsCount = 9;
+  if (millis() - lastSysStats < (1000 / statsCount))
     return;
   lastSysStats = millis();
 
-  if (flags.wifiConnected)
-    telemetry.update("RSSI", String(WiFi.RSSI()));
-  telemetry.update("Heap Free", String(ESP.getFreeHeap() / 1024.f), "KiB", "np");
-  telemetry.update("Heap Min", String(ESP.getMinFreeHeap() / 1024.f), "KiB", "");
-  telemetry.update("Heap MaxAlloc", String(ESP.getMaxAllocHeap() / 1024.f), "KiB", "np");
-  telemetry.update("PS Free", String(ESP.getFreePsram() / 1024.f), "KiB", "np");
-  telemetry.update("PS Min", String(ESP.getMinFreePsram() / 1024.f), "KiB", "");
-  telemetry.update("PS MaxAlloc", String(ESP.getMaxAllocPsram() / 1024.f), "KiB", "np");
-  telemetry.update("Time", timeString(), "", "t,np");
-  telemetry.update("Uptime", String(millis() / 3600000.f), "hours", "");
+  switch (selector)
+  {
+    case 0:
+      if (flags.wifiConnected)
+        telemetry.update("RSSI", String(WiFi.RSSI()));
+      break;
+    case 1:
+      telemetry.update("Heap Free", String(ESP.getFreeHeap() / 1024.f), "KiB", "np");
+      break;
+    case 2:
+      telemetry.update("Heap Min", String(ESP.getMinFreeHeap() / 1024.f), "KiB", "");
+      break;
+    case 3:
+      telemetry.update("Heap MaxAlloc", String(ESP.getMaxAllocHeap() / 1024.f), "KiB", "np");
+      break;
+    case 4:
+      telemetry.update("PS Free", String(ESP.getFreePsram() / 1024.f), "KiB", "np");
+      break;
+    case 5:
+      telemetry.update("PS Min", String(ESP.getMinFreePsram() / 1024.f), "KiB", "");
+      break;
+    case 6:
+      telemetry.update("PS MaxAlloc", String(ESP.getMaxAllocPsram() / 1024.f), "KiB", "np");
+      break;
+    case 7:
+      telemetry.update("Uptime", String(millis() / 3600000.f), "hours", "");
+      break;
+    case 8:
+      telemetry.update("Time", timeString(), "", "t,np");
+      break;
+  }
+  selector = (selector + 1) % statsCount;
 }
