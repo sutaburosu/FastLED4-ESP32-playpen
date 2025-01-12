@@ -74,15 +74,7 @@ void setup()
     Serial.printf("LD2450 radar active");
 }
 
-void loop()
-{
-  static uint64_t µsStart = 0;   // start of the first sample
-  static uint64_t µsDraw = 0;    // total time spent drawing effects
-  static uint64_t µsShow = 0;    // total time spent showing the leds
-  static uint32_t µsSamples = 0; // number of samples taken
-  if (!µsStart)
-    µsStart = micros();
-
+void draw() {
   // Apply any changed settings from the UI
   FastLED.setBrightness(brightness);
   fxEngine.setSpeed(timeSpeed);
@@ -93,26 +85,38 @@ void loop()
     if (switchFx)
     {
       fxEngine.nextFx(2000);
-      telemetry.log("FxId", {.minMs = 2000,
-                             .value = String(fxEngine.getCurrentFxId()),
-                             .teleplot = "np"});
-      if (2 == fxEngine.getCurrentFxId())
+      const auto fxId = fxEngine.getCurrentFxId();
+      telemetry.log("FxId", String(fxId));
+      if (2 == fxId)
       {
         animartrix.fxNext();
-        telemetry.log("AnimartrixFx", {.minMs = 2000,
-                                       .value = String(animartrix.fxGet()),
-                                       .teleplot = "np"});
+        telemetry.log("AnimartrixFx", String(animartrix.fxGet()));
       }
     }
   }
 
   // Draw the current effect
-  µsDraw -= micros();
   fxEngine.draw(millis(), leds);
+
   // onboard LED
   leds[NUM_LEDS] = CHSV(millis() / 16, 255, 128);
+
   // show the speed of any detected radar targets
   radar(leds, xyMap, ld2450);
+}
+
+void loop()
+{
+  static uint64_t µsStart = 0;   // start of the first sample
+  static uint64_t µsDraw = 0;    // total time spent drawing effects
+  static uint64_t µsShow = 0;    // total time spent showing the leds
+  static uint32_t µsSamples = 0; // number of samples taken
+  if (!µsStart)
+    µsStart = micros();
+
+  // Draw the effects
+  µsDraw -= micros();
+  draw();
   µsDraw += micros();
 
   // Send the framebuffer to the LEDs
@@ -136,31 +140,32 @@ void loop()
     // It might be useful for effects to know when WiFi connects...
   }
 
-  // Gather loop() timing data at most 5 times per second
+  // Gather loop() timing data, and send telemetry at most 5 times per second
   µsSamples++;
-  if (micros() - µsStart >= 200000)
+  uint64_t µsElapsed = micros() - µsStart;
+  float divisor = 1000.f * µsSamples;
+  if (µsElapsed >= 200000)
   {
-    uint64_t other = (micros() - µsStart) - µsDraw - µsShow;
-    telemetry.log("draw",
-                  {.minMs = 250,
-                   .value = String(µsDraw / 1000.f / µsSamples),
-                   .unit = "ms"});
-    telemetry.log("show",
-                  {.minMs = 250,
-                   .value = String(µsShow / 1000.f / µsSamples),
-                   .unit = "ms"});
-    telemetry.log("nonFastLED",
-                  {.minMs = 250,
-                   .value = String(other / 1000.f / µsSamples),
-                   .unit = "ms"});
-    telemetry.log("fps",
-                  {.minMs = 250,
-                   .value = String(µsSamples * 1000000.f / (micros() - µsStart)),
-                   .unit = "Hz"});
+    uint64_t µsNonFastLED = µsElapsed - µsDraw - µsShow;
+    // These use similar, non-default settings
+    TelemetryDatum td = {.minMs = 200,
+                         .unit = "ms",
+                         .teleplot = ""};
+    td.value = String(µsDraw / divisor);
+    telemetry.log("draw", td);
+    td.value = String(µsShow / divisor);
+    telemetry.log("show", td);
+    td.value = String(µsNonFastLED / divisor);
+    telemetry.log("nonFastLED", td);
+    td.value = String(µsSamples * 1000000.f / µsElapsed);
+    td.unit = "Hz";
+    telemetry.log("fps", td);
     µsSamples = µsShow = µsDraw = µsStart = 0;
-  }
 
-  // Gather RAM, uptime and WiFi signal data and send all telemetry
-  sysStats();
-  telemetry.send();
+    // Gather RAM usage, uptime, and WiFi signal data
+    sysStats();
+
+    // Send telemetry that has changed
+    telemetry.send();
+  }
 }

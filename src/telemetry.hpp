@@ -32,7 +32,7 @@ struct TelemetryDatum
   String value;           // current value
   String lastValue;       // previous value that was sent
   String unit;            // unit of the value
-  String teleplot = "";   // teleplot configuration flags
+  String teleplot = "np"; // teleplot configuration flags
   bool udpOnly = false;   // send only via UDP, never Serial
   bool sanitise = true;   // replace : and | with Unicode characters
 };
@@ -47,23 +47,17 @@ struct Telemetry
   struct sockaddr_in udpSockAddr; // the destination address for UDP telemetry
   uint32_t lastUDPsend = 0;       // when the last UDP telemetry was sent
 
+  // Add a telemetry datum, or update the value if it already exists
   void log(String name, const TelemetryDatum &datum)
   {
     auto it = telemetryData.find(name);
     if (it == telemetryData.end())
-    {
       telemetryData[name] = datum;
-      return;
-    }
-    it->second.value = datum.value;
-    it->second.unit = datum.unit;
-    it->second.teleplot = datum.teleplot;
-    it->second.minMs = datum.minMs;
-    it->second.maxMs = datum.maxMs;
-    it->second.udpOnly = datum.udpOnly;
-    it->second.sanitise = datum.sanitise;
+    else
+      it->second.value = datum.value;
   }
 
+  // Add a telemetry datum, or update the value if it already exists
   void log(const String name, const String value)
   {
     auto it = telemetryData.find(name);
@@ -269,9 +263,9 @@ struct Telemetry
     size_t len = sendto(udpSocket, pkt_cstr, telemetryPacket.length(),
                         0, (struct sockaddr *)&udpSockAddr, sizeof(udpSockAddr));
     if (len <= 0)
-      Serial.printf("sendto() failed: %d\n", len);
-    else
-    {
+      return;
+
+    if (false) {  // send Telemetry bandwidth stats?
       static uint32_t udpBytes = 0;
       static uint32_t udpPackets = 0;
       static uint32_t udpReportms = 0;
@@ -280,12 +274,13 @@ struct Telemetry
       if (!udpReportms)
         udpReportms = millis();
 
-      if (millis() - udpReportms > 3000)
+      uint32_t elapsed = millis() - udpReportms;
+      if (elapsed >= 5000)
       {
-        uint32_t elapsed = millis() - udpReportms;
+        update("UDP bandwidth", String(udpBytes * 1000.f / elapsed), "B/s");
+        update("UDP packets", String(udpPackets * 1000.f / elapsed), "pkts/s");
+        // update("UDP avg size", String(udpBytes / udpPackets), "B");
         udpReportms = millis();
-        update("UDP bandwidth", String(udpBytes * 1000.f / elapsed), "B/s", "np");
-        update("UDP packets", String(udpPackets * 1000.f / elapsed), "pkts/s", "np");
         udpBytes = udpPackets = 0;
       }
     }
@@ -302,7 +297,7 @@ void sysStats()
     return;
   lastSysStats = millis();
 
-  switch (selector)
+  switch (selector++)
   {
   case 0:
     if (flags.wifiConnected)
@@ -310,44 +305,42 @@ void sysStats()
                              .unit = "dBm"});
     break;
   case 1:
-    telemetry.log("Heap Free", {.maxMs = 5000,
+    telemetry.log("Heap Free", {.maxMs = 5005,
                                 .value = String(ESP.getFreeHeap() / 1024.f),
-                                .unit = "KiB"});
+                                .unit = "KiB",
+                                .teleplot = ""});
     break;
   case 2:
-    telemetry.log("Heap Min", {.maxMs = 5000,
-                               .value = String(ESP.getMinFreeHeap() / 1024.f),
-                               .teleplot = "np"});
+    telemetry.log("Heap Min", {.maxMs = 5010,
+                               .value = String(ESP.getMinFreeHeap() / 1024.f)});
     break;
   case 3:
-    telemetry.log("Heap Max", {.maxMs = 5000,
-                               .value = String(ESP.getMaxAllocHeap() / 1024.f),
-                               .teleplot = "np"});
+    telemetry.log("Heap Max", {.maxMs = 5015,
+                               .value = String(ESP.getMaxAllocHeap() / 1024.f)});
     break;
   case 4:
-    telemetry.log("PS Free", {.maxMs = 5000,
+    telemetry.log("PS Free", {.maxMs = 5020,
                               .value = String(ESP.getFreePsram() / 1024.f),
-                              .unit = "KiB"});
+                              .unit = "KiB",
+                              .teleplot = ""});
     break;
   case 5:
-    telemetry.log("PS Min", {.maxMs = 5000,
-                             .value = String(ESP.getMinFreePsram() / 1024.f),
-                             .teleplot = "np"});
+    telemetry.log("PS Min", {.maxMs = 5025,
+                             .value = String(ESP.getMinFreePsram() / 1024.f)});
     break;
   case 6:
-    telemetry.log("PS Max", {.maxMs = 5000,
-                             .value = String(ESP.getMaxAllocPsram() / 1024.f),
-                             .teleplot = "np"});
+    telemetry.log("PS Max", {.maxMs = 5030,
+                             .value = String(ESP.getMaxAllocPsram() / 1024.f)});
     break;
   case 7:
     telemetry.log("Uptime", {.value = String(millis() / 3600000.f),
-                             .unit = "hours",
-                             .teleplot = "np"});
+                             .unit = "hours"});
     break;
   case 8:
     telemetry.log("Time", {.value = timeString(),
                            .teleplot = "t,np"});
     break;
+  default:
+    selector = 0;
   }
-  selector = (selector + 1) % statsCount;
 }
