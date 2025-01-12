@@ -52,24 +52,23 @@ R"raw_literal_css(
   }
   #responsediv {
     transition: all 0.5s ease-in-out;
-    display: none;
-    margin-top: 20px;
+    height: 0px;
+    margin-top: 0px;
     font-size: 14px;
     color: #000000;
     background-color: #e0e0e0;
-    padding: 10px;
-    border-radius: 5px;
-    border: 2px solid #45a049;
-    width: 50%;
+    padding: 0px;
+    border: none;
+    overflow: hidden !important;
   }
   #updatediv {
     transition: all 0.5s ease-in-out;
-    display: none;
     margin-top: 0px;
     padding: 0px;
     border: none;
     width: 500px;
-    height: 700px;
+    height: 0px;
+    overflow: hidden !important;
   }
   #updateframe {
     width: 100%;
@@ -77,7 +76,6 @@ R"raw_literal_css(
     margin-top: 0px;
     padding: 0px;
     border-radius: 5px;
-    border: 2px solid #45a049;
   }
 </style>
 )raw_literal_css"
@@ -89,7 +87,7 @@ R"raw_literal_js(
     function hideResponse() {
       setTimeout(() => {
         responseDiv.innerText = '';
-        responseDiv.style.display = 'none';
+        responseDiv.style.height = '0px';
       }, 1500);
     }
 
@@ -97,7 +95,7 @@ R"raw_literal_js(
       .then(response => response.text())
       .then(data => {
         responseDiv.innerText = data;
-        responseDiv.style.display = 'block';
+        responseDiv.style.height = 'auto';
         hideResponse();
       })
       .catch(error => console.error('Error:', error));
@@ -111,14 +109,14 @@ R"raw_literal_js(
     document.getElementById('UDPtelemetryoff').onclick = () => sendRequest('/UDPtelemetryoff');
     document.getElementById('updateButton').onclick = () => {
       const updateDiv = document.getElementById('updatediv');
-      const iframe = document.getElementById('updateframe');
-      if (updateDiv.style.display != 'block') {
-        updateDiv.style.display = 'block';
-        iframe.src = '/update';
+      if (updateDiv.style.height != '400px') {
+        updateDiv.style.height = '400px';
+        const iframe = document.getElementById('updateframe');
+        if (iframe.src === '') {
+          iframe.src = '/update';
+        }
       } else {
-        updateDiv.style.display = 'none';
-        iframe.src = '';
-        iframe.innerHTML = '';
+        updateDiv.style.height = '0px';
       }
     };
   });

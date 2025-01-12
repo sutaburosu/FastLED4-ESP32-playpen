@@ -137,10 +137,10 @@ void loop()
   if (micros() - µsStart >= 200000)
   {
     uint64_t other = (micros() - µsStart) - µsDraw - µsShow;
-    telemetry.update("draw", String(µsDraw / µsSamples), "µs", "", 250);
-    telemetry.update("show", String(µsShow / µsSamples), "µs", "", 250);
-    telemetry.update("nonFastLED", String(other / µsSamples), "µs", "", 250);
-    telemetry.update("fps", String(µsSamples * 1000000 / (micros() - µsStart)),
+    telemetry.update("draw", String(µsDraw / 1000.f / µsSamples), "ms", "", 250);
+    telemetry.update("show", String(µsShow / 1000.f / µsSamples), "ms", "", 250);
+    telemetry.update("nonFastLED", String(other / 1000.f / µsSamples), "ms", "", 250);
+    telemetry.update("fps", String(µsSamples * 1000000.f / (micros() - µsStart)),
                      "Hz", "", 250);
     µsSamples = µsShow = µsDraw = µsStart = 0;
   }

@@ -83,10 +83,9 @@ void dnsSetup()
 #endif
 void ntpSetup()
 {
-  // String ntp1 = preferences.getString("ntp_server1", NTP_SERVER1);
-  // const char *ntp1_str = ntp1.c_str();
-  const char *ntp1_str{preferences.getString(
-                       "ntp_server1", NTP_SERVER1).c_str()};
+  String ntp1 = preferences.getString("ntp_server1", NTP_SERVER1);
+  const char *ntp1_str = ntp1.c_str();
+
   ip_addr_t ntp;
   // Check if the NTP server is an IPv4/6 address or hostname
   if (ip4addr_aton(ntp1_str, &ntp.u_addr.ip4))

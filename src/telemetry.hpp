@@ -42,8 +42,9 @@ struct Telemetry
   std::map<String, TelemetryDatum> telemetryData;
   std::deque<String> serialQueue;
   std::deque<String> udpQueue;
-  int udpSocket = -1;           // the socket for sending UDP telemetry
-  struct sockaddr_in udpSockAddr;  // the destination address for UDP telemetry
+
+  int udpSocket = -1;             // a socket for sending UDP telemetry
+  struct sockaddr_in udpSockAddr; // the destination address for UDP telemetry
 
   // You don't need to add() a datum before update()ing it. If it needs custom
   // intervals or Teleplot flags AND there are multiple places in your code
@@ -76,7 +77,7 @@ struct Telemetry
               String teleplot = "np",
               uint32_t intervalMs = 1000,
               uint32_t maxIntervalMs = 60000,
-              bool udpOnly = true,
+              bool udpOnly = false,
               bool sanitise = true)
   {
     auto datum = telemetryData.find(name);
@@ -146,7 +147,8 @@ struct Telemetry
       serialQueue.pop_front();
 
     if (serialQueue.empty() || ! flags.serialTelemetry)
-      return;
+      if (item.isEmpty())
+        return;
 
     unsigned int charsToSend = 8;
     while (charsToSend > 0)
@@ -251,6 +253,24 @@ struct Telemetry
                         0, (struct sockaddr *)&udpSockAddr, sizeof(udpSockAddr));
     if (len <= 0)
       Serial.printf("sendto() failed: %d\n", len);
+    else {
+      static uint32_t udpBytes = 0;
+      static uint32_t udpPackets = 0;
+      static uint32_t udpReportms = 0;
+      udpBytes += len;
+      udpPackets++;
+      if (!udpReportms)
+        udpReportms = millis();
+      
+      if (millis() - udpReportms > 3000)
+      {
+        uint32_t elapsed = millis() - udpReportms;
+        udpReportms = millis();
+        update("Telemetry bandwidth", String(udpBytes * 1000.f / elapsed), "B/s", "np");
+        update("Telemetry packets", String(udpPackets * 1000.f / elapsed), "pkts/s", "np");
+        udpBytes = udpPackets = 0;
+      }
+    }
   }
 } telemetry;
 
@@ -264,12 +284,12 @@ void sysStats()
 
   if (flags.wifiConnected)
     telemetry.update("RSSI", String(WiFi.RSSI()));
-  telemetry.update("Heap Free", String(ESP.getFreeHeap()), "bytes", "np");
-  telemetry.update("Heap Min", String(ESP.getMinFreeHeap()), "bytes", "");
-  telemetry.update("Heap MaxAlloc", String(ESP.getMaxAllocHeap()), "bytes", "np");
-  telemetry.update("PS Free", String(ESP.getFreePsram()), "bytes", "np");
-  telemetry.update("PS Min", String(ESP.getMinFreePsram()), "bytes", "");
-  telemetry.update("PS MaxAlloc", String(ESP.getMaxAllocPsram()), "bytes", "np");
+  telemetry.update("Heap Free", String(ESP.getFreeHeap() / 1024.f), "KiB", "np");
+  telemetry.update("Heap Min", String(ESP.getMinFreeHeap() / 1024.f), "KiB", "");
+  telemetry.update("Heap MaxAlloc", String(ESP.getMaxAllocHeap() / 1024.f), "KiB", "np");
+  telemetry.update("PS Free", String(ESP.getFreePsram() / 1024.f), "KiB", "np");
+  telemetry.update("PS Min", String(ESP.getMinFreePsram() / 1024.f), "KiB", "");
+  telemetry.update("PS MaxAlloc", String(ESP.getMaxAllocPsram() / 1024.f), "KiB", "np");
   telemetry.update("Time", timeString(), "", "t,np");
   telemetry.update("Uptime", String(millis() / 3600000.f), "hours", "");
 }
