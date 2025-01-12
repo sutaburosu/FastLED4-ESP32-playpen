@@ -2,7 +2,23 @@
 
 #include <deque>
 #include <map>
+#include <time.h> 
+#include <lwip/sockets.h>
+#include <lwip/netdb.h>
 #include "preferences.hpp"
+
+// Return a String representing the current time
+String timeString()
+{
+  time_t now;
+  struct tm timeInfo;
+  char timeString[32];
+  time(&now);
+  localtime_r(&now, &timeInfo);
+  strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M:%S %Z", &timeInfo);
+  return String(timeString);
+}
+
 
 // Store Teleplot-compatible telemetry data, where each datum has it's own
 // sending interval. Periodically coalesce only changed values, and send them
@@ -12,22 +28,22 @@ struct Telemetry
 {
   struct TelemetryDatum
   {
-    uint32_t lastSentms;    // when the last update was sent
-    uint32_t intervalms;    // send changes no more frequently than this
-    uint32_t maxIntervalms; // send at least this frequently (even if unchanged)
+    uint32_t sentMs;        // when the last update was sent
+    uint32_t intervalMs;    // send changes no more frequently than this
+    uint32_t maxIntervalMs; // send at least this frequently (even if unchanged)
     String value;           // the current value
     String lastValue;       // the previous value that was sent
     String unit;            // the unit of the value
     String teleplot;        // the teleplot configuration flags for this datum
-    bool UDPonly;           // send only via UDP, never Serial
+    bool udpOnly;           // send only via UDP, never Serial
     bool sanitise;          // replace : and | with Unicode characters
   };
 
   std::map<String, TelemetryDatum> telemetryData;
   std::deque<String> serialQueue;
-  std::deque<String> UDPQueue;
+  std::deque<String> udpQueue;
   int udpSocket = -1;           // the socket for sending UDP telemetry
-  struct sockaddr_in sock_addr; // the destination address for UDP telemetry
+  struct sockaddr_in udpSockAddr;  // the destination address for UDP telemetry
 
   // You don't need to add() a datum before update()ing it. If it needs custom
   // intervals or Teleplot flags AND there are multiple places in your code
@@ -35,21 +51,21 @@ struct Telemetry
   // with all the arguments, and simply update("name", "value") everywhere else.
   void add(String name,
            String unit = "",
-           String teleplot = "t,np",
+           String teleplot = "np",
            String value = "",
-           uint32_t intervalms = 1000,
-           uint32_t maxIntervalms = 60000,
-           bool UDPonly = false,
+           uint32_t intervalMs = 1000,
+           uint32_t maxIntervalMs = 60000,
+           bool udpOnly = false,
            bool sanitise = true)
   {
     telemetryData[name] = TelemetryDatum {
-        .lastSentms = 0,
-        .intervalms = intervalms,
-        .maxIntervalms = maxIntervalms,
+        .sentMs = 0,
+        .intervalMs = intervalMs,
+        .maxIntervalMs = maxIntervalMs,
         .value = value,
         .unit = unit,
         .teleplot = teleplot,
-        .UDPonly = UDPonly,
+        .udpOnly = udpOnly,
         .sanitise = sanitise
     };
   }
@@ -57,18 +73,18 @@ struct Telemetry
   void update(String name,
               String value,
               String unit = "",
-              String teleplot = "t,np",
-              uint32_t intervalms = 1000,
-              uint32_t maxIntervalms = 60000,
-              bool UDPonly = true,
+              String teleplot = "np",
+              uint32_t intervalMs = 1000,
+              uint32_t maxIntervalMs = 60000,
+              bool udpOnly = true,
               bool sanitise = true)
   {
     auto datum = telemetryData.find(name);
     if (datum != telemetryData.end())
       datum->second.value = value;
     else
-      add(name, unit, teleplot, value, intervalms, maxIntervalms,
-          UDPonly, sanitise);
+      add(name, unit, teleplot, value, intervalMs, maxIntervalMs,
+          udpOnly, sanitise);
   }
 
   void sanitiseValue(String &value)
@@ -80,9 +96,9 @@ struct Telemetry
 
   void send()
   {
-    if (!flags.UDPTelemetry && !flags.serialTelemetry) {
+    if (!flags.udpTelemetry && !flags.serialTelemetry) {
       serialQueue.clear();
-      UDPQueue.clear();
+      udpQueue.clear();
       return;
     }
 
@@ -90,14 +106,14 @@ struct Telemetry
     for (auto &kv : telemetryData)
     {
       TelemetryDatum &td = kv.second;
-      uint32_t elapsed = now - td.lastSentms;
-      if (elapsed < td.maxIntervalms) {
-        if (elapsed < td.intervalms)
+      uint32_t elapsed = now - td.sentMs;
+      if (elapsed < td.maxIntervalMs) {
+        if (elapsed < td.intervalMs)
           continue;
         if (td.value == td.lastValue)
           continue;
       }
-      td.lastSentms = now;
+      td.sentMs = now;
       td.lastValue = td.value;
 
       String value = td.value;
@@ -111,10 +127,10 @@ struct Telemetry
         report += "|" + td.teleplot;
       report += "\n";
 
-      if (flags.serialTelemetry && !td.UDPonly)
+      if (flags.serialTelemetry && !td.udpOnly)
         serialQueue.push_back(report);
-      if (flags.UDPTelemetry)
-        UDPQueue.push_back(report);
+      if (flags.udpTelemetry)
+        udpQueue.push_back(report);
     }
     sendUDP();
     sendSerial();
@@ -156,14 +172,14 @@ struct Telemetry
 
   void sendUDP()
   {
-    if (!flags.wifiConnected || !flags.UDPTelemetry
-        || 0xffffffff == sock_addr.sin_addr.s_addr)
+    if (!flags.wifiConnected || !flags.udpTelemetry
+        || 0xffffffff == udpSockAddr.sin_addr.s_addr)
     {
-      UDPQueue.clear();
+      udpQueue.clear();
       return;
     }
 
-    if (0 == UDPQueue.size())
+    if (0 == udpQueue.size())
       return;
 
     // Create a UDP socket if it doesn't exist
@@ -179,61 +195,81 @@ struct Telemetry
     }
 
     // Set up the destination address, if not already done
-    if (!sock_addr.sin_addr.s_addr)
+    if (!udpSockAddr.sin_addr.s_addr)
     {
-      sock_addr.sin_family = AF_INET;
-      sock_addr.sin_port = htons(preferences.getUInt("telemetry_port", 47269));
-      sock_addr.sin_len = sizeof(sock_addr);
+      udpSockAddr.sin_family = AF_INET;
+      udpSockAddr.sin_port = htons(preferences.getUInt("telemetry_port", 47269));
+      udpSockAddr.sin_len = sizeof(udpSockAddr);
       String host = preferences.getString("telemetry_host", "192.168.1.194");
       const char *host_cstr = host.c_str();
-      int res = inet_aton(host_cstr, &sock_addr.sin_addr);
+      int res = inet_aton(host_cstr, &udpSockAddr.sin_addr);
       if (1 != res)
       {
         // try to interpret as IPv6. Untested. I'm not sure if I'm doing this properly.
-        res = inet_pton(AF_INET6, host_cstr, &(((sockaddr_in6*)&sock_addr)->sin6_addr));
-        if (res == 1)
+        res = inet_pton(AF_INET6, host_cstr, &(((sockaddr_in6*)&udpSockAddr)->sin6_addr));
+        if (1 == res)
         {
-          sock_addr.sin_family = AF_INET6;
-          sock_addr.sin_len = sizeof(sock_addr);
+          udpSockAddr.sin_family = AF_INET6;
+          udpSockAddr.sin_len = sizeof(udpSockAddr);
         }
         else
         {
           // try to resolve it as a hostname
           // again, I'm not sure if I'm doing this properly
-          struct hostent *hostent = gethostbyname(host_cstr);
-          if (hostent == NULL)
+          struct hostent *hostEnt = gethostbyname(host_cstr);
+          if (NULL == hostEnt)
           {
             Serial.printf("Failed to resolve telemetry host '%s'\n", host_cstr);
-            sock_addr.sin_addr.s_addr = 0xffffffff;
+            udpSockAddr.sin_addr.s_addr = 0xffffffff;
             return;
           }
-          memcpy(&sock_addr.sin_addr, hostent->h_addr_list[0], hostent->h_length);
-          if (hostent->h_addrtype == AF_INET6)
+          memcpy(&udpSockAddr.sin_addr, hostEnt->h_addr_list[0], hostEnt->h_length);
+          if (hostEnt->h_addrtype == AF_INET6)
           {
-            sock_addr.sin_family = AF_INET6;
-            sock_addr.sin_len = sizeof(sock_addr);
+            udpSockAddr.sin_family = AF_INET6;
+            udpSockAddr.sin_len = sizeof(udpSockAddr);
           }
         }
       }
-      Serial.printf("Sending telemetry to '%s' %s:%u\n", host_cstr, inet_ntoa(sock_addr.sin_addr.s_addr), sock_addr.sin_port);
+      Serial.printf("Sending telemetry to '%s' %s:%u\n", host_cstr, inet_ntoa(udpSockAddr.sin_addr.s_addr), udpSockAddr.sin_port);
     }
 
     // Concatenate up to 1KiB of telemetry in 1 packet
     String telemetryPacket = "";
-    while (UDPQueue.size() > 0)
+    while (udpQueue.size() > 0)
     {
-      String entry = UDPQueue.front();
+      String entry = udpQueue.front();
       if (telemetryPacket.length() + entry.length() > 1024 && telemetryPacket.length())
         break;
+      udpQueue.pop_front();
       telemetryPacket += entry;
-      UDPQueue.pop_front();
     }
 
     // Send the packet
     const char *pkt_cstr = telemetryPacket.c_str();
     size_t len = sendto(udpSocket, pkt_cstr, telemetryPacket.length(),
-                        0, (struct sockaddr *)&sock_addr, sizeof(sock_addr));
+                        0, (struct sockaddr *)&udpSockAddr, sizeof(udpSockAddr));
     if (len <= 0)
       Serial.printf("sendto() failed: %d\n", len);
   }
 } telemetry;
+
+// Send some system statistics at most once per second
+void sysStats()
+{
+  static uint32_t lastSysStats = 0;
+  if (millis() - lastSysStats < 1000)
+    return;
+  lastSysStats = millis();
+
+  if (flags.wifiConnected)
+    telemetry.update("RSSI", String(WiFi.RSSI()));
+  telemetry.update("Heap Free", String(ESP.getFreeHeap()), "bytes", "np");
+  telemetry.update("Heap Min", String(ESP.getMinFreeHeap()), "bytes", "");
+  telemetry.update("Heap MaxAlloc", String(ESP.getMaxAllocHeap()), "bytes", "np");
+  telemetry.update("PS Free", String(ESP.getFreePsram()), "bytes", "np");
+  telemetry.update("PS Min", String(ESP.getMinFreePsram()), "bytes", "");
+  telemetry.update("PS MaxAlloc", String(ESP.getMaxAllocPsram()), "bytes", "np");
+  telemetry.update("Time", timeString(), "", "t,np");
+  telemetry.update("Uptime", String(millis() / 3600000.f), "hours", "");
+}

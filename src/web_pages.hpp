@@ -1,4 +1,7 @@
 #pragma once
+#include <ESPAsyncWebServer.h>
+#include <ElegantOTA.h>
+#include "preferences.hpp"
 
 const char* indexContent = 
 /* html */
@@ -121,3 +124,35 @@ R"raw_literal_js(
   });
 </script>
 )raw_literal_js";
+
+
+void setupWebServer() {
+  // Set up web server and OTA updates
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(200, "text/html", indexContent); });
+  server.on("/restart", HTTP_GET, [](AsyncWebServerRequest *request)
+            { flags.restartPending = true;
+              request->send(200, "text/plain", "Restarting..."); });
+  server.on("/telemetryon", HTTP_GET, [](AsyncWebServerRequest *request)
+            { flags.serialTelemetry = true;
+              preferences.putBool("serialTelemetry", true);
+              request->send(200, "text/plain", "Serial telemetry on"); });
+  server.on("/telemetryoff", HTTP_GET, [](AsyncWebServerRequest *request)
+            { flags.serialTelemetry = false;
+              preferences.putBool("serialTelemetry", false);
+              request->send(200, "text/plain", "Serial telemetry off"); });
+  server.on("/UDPtelemetryon", HTTP_GET, [](AsyncWebServerRequest *request)
+            { flags.udpTelemetry = true;
+              preferences.putBool("udpTelemetry", true);
+              request->send(200, "text/plain", "UDP telemetry on"); });
+  server.on("/UDPtelemetryoff", HTTP_GET, [](AsyncWebServerRequest *request)
+            { flags.udpTelemetry = false;
+              preferences.putBool("udpTelemetry", false);
+              request->send(200, "text/plain", "UDP telemetry off"); });
+
+  ElegantOTA.begin(&server);
+  ElegantOTA.onStart(onOTAStart);
+  ElegantOTA.onProgress(onOTAProgress);
+  ElegantOTA.onEnd(onOTAEnd);
+  server.begin();
+}

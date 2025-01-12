@@ -1,19 +1,24 @@
 #pragma once
 #include <WiFi.h>
 #include <esp_sntp.h>
+#include <lwip/sockets.h>
+#include <lwip/netdb.h>
 #include "preferences.hpp"
+#include "telemetry.hpp"
 
-void ntp_setup();
-void dns_setup();
+void ntpSetup();
+void dnsSetup();
 void ntpCallback(timeval *tv);
 void onOTAStart();
 void onOTAProgress(size_t current, size_t final);
 void onOTAEnd(bool success);
-void wifi_event(WiFiEvent_t event, WiFiEventInfo_t info);
+void wifiEvent(WiFiEvent_t event, WiFiEventInfo_t info);
 const char *wifiEventName(WiFiEvent_t event);
 const char *wifiAuthModeName(wifi_auth_mode_t mode);
+AsyncWebServer server(80);
 
-void wifi_setup()
+
+void setupWiFi()
 {
   if ((! preferences.isKey("wifi_ssid")) ||
       (! preferences.isKey("wifi_password")) ||
@@ -52,7 +57,7 @@ void wifi_setup()
     Serial.setTimeout(oldtimeout);
   }
 
-  WiFi.onEvent(wifi_event);
+  WiFi.onEvent(wifiEvent);
   WiFi.setHostname(preferences.getString("wifi_hostname").c_str());
   WiFi.mode(WIFI_STA);
   WiFi.setAutoReconnect(true);
@@ -60,30 +65,23 @@ void wifi_setup()
              preferences.getString("wifi_password").c_str());
 }
 
-void dns_setup()
+void dnsSetup()
 {
-  // Just an attempt to fix DNS resolution, but it disables DHCP
-  // WiFi.config(WiFi.localIP(),
-  //             WiFi.gatewayIP(),
-  //             WiFi.subnetMask(),
-  //             IPAddress(1, 1, 1, 1),
-  //             IPAddress(1, 0, 0, 1));
-
   // Log current network details
-  telemetry.update("IP address", WiFi.localIP().toString());
-  telemetry.update("Gateway", WiFi.gatewayIP().toString());
-  telemetry.update("Subnet", WiFi.subnetMask().toString());
-  telemetry.update("DNS1", WiFi.dnsIP().toString());
-  telemetry.update("DNS2", WiFi.dnsIP(1).toString());
-  telemetry.update("Hostname", String(WiFi.getHostname()));
-  telemetry.update("MAC address", WiFi.macAddress());
+  telemetry.update("IP", WiFi.localIP().toString(), "", "t,np");
+  telemetry.update("Gateway", WiFi.gatewayIP().toString(), "", "t,np");
+  telemetry.update("Subnet", WiFi.subnetMask().toString(), "", "t,np");
+  telemetry.update("DNS1", WiFi.dnsIP().toString(), "", "t,np");
+  telemetry.update("DNS2", WiFi.dnsIP(1).toString(), "", "t,np");
+  telemetry.update("Hostname", String(WiFi.getHostname()), "", "t,np");
+  telemetry.update("MAC", WiFi.macAddress(), "", "t,np");
 }
 
 // Set NTP time sync and timezone
 #if !defined(NTP_SERVER1)
 #define NTP_SERVER1 "\"time.cloudflare.com\""
 #endif
-void ntp_setup()
+void ntpSetup()
 {
   // String ntp1 = preferences.getString("ntp_server1", NTP_SERVER1);
   // const char *ntp1_str = ntp1.c_str();
@@ -131,7 +129,7 @@ void ntp_setup()
 
 void ntpCallback(timeval *tv)
 {
-  telemetry.update("NTP updated", timeString(), "", "t,np", 1000, 3600000, false);
+  telemetry.update("NTP updated", timeString(), "", "t,np", 1000, 900000, false);
 }
 
 void onOTAStart()
@@ -143,7 +141,7 @@ void onOTAStart()
 void onOTAProgress(size_t current, size_t final)
 {
   static int percent = 255;
-  const int step = 5;
+  const int step = 1;
   int new_percent = (current * 100llu / final / step) * step;
   if (new_percent != percent)
   {
@@ -164,7 +162,7 @@ void onOTAEnd(bool success)
 }
 
 // React to, and print information about, a WiFi event
-void wifi_event(WiFiEvent_t event, WiFiEventInfo_t info)
+void wifiEvent(WiFiEvent_t event, WiFiEventInfo_t info)
 {
   bool prev_wifi_connected = flags.wifiConnected;
   Serial.printf("WiFi %s ", wifiEventName(event));
@@ -225,8 +223,8 @@ void wifi_event(WiFiEvent_t event, WiFiEventInfo_t info)
     flags.doConnectActions = true;
     if (! flags.firstConnect) {
       flags.firstConnect = true;
-      dns_setup();
-      ntp_setup();
+      dnsSetup();
+      ntpSetup();
     }
   }
 }

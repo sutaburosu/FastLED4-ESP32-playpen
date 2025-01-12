@@ -73,12 +73,12 @@
 
 ### Installation
 
-Edit the `setPreferences()` function in `main.cpp` to set your WiFi details,
-etc.  These will be stored in NVS, so you can remove them from the sketch as
-soon as you've set them.
+Edit the `storePreferences()` function in `preferences.hpp` to set your WiFi
+details, etc.  These will be stored in NVS, so you can remove them from the
+sketch as soon as you've set them.
 
-With no stored preferences, the sketch will pause at startup for you to enter
-WiFi config via Serial.
+If no stored preferences are found, the sketch will pause at startup for you
+to enter WiFi config via Serial.
 
 Set the entire matrix and per-panel dimensions at the top of `main.cpp`.
 Edit `setup()` to set the data pins and leds[] data slices.

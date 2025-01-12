@@ -1,15 +1,8 @@
 #pragma once
 #include <Arduino.h>
-#include <Preferences.h>
-#include <stdio.h>
-#include <string>
-#include <esp_sntp.h>
-#include <time.h>
-#include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <ElegantOTA.h>
-#include <lwip/sockets.h>
-#include <lwip/netdb.h>
+#include <esp_wifi.h>
 
 #include <FastLED.h>
 #include <fl/json.h>
@@ -20,11 +13,14 @@
 #include <fx/2d/noisepalette.h>
 #include <fx/2d/animartrix.hpp>
 
-void radar();
-
+#include "preferences.hpp"
 #include "telemetry.hpp"
-
-
+#include "wifi.hpp"
+#include "XY.hpp"
+#include "LD2450.h"
+#include "radar.hpp"
+#include "web_pages.hpp"
+#include "fxWater.hpp"
 
 // TODO Is there still no way to directly embed a binary file in C++23‽ C23 has it.
 // 
@@ -34,32 +30,3 @@ void radar();
 //   };
 // }
 
-// Return a String representing the current time
-String timeString()
-{
-  time_t now;
-  struct tm timeinfo;
-  char timeString[32];
-  time(&now);
-  localtime_r(&now, &timeinfo);
-  strftime(timeString, sizeof(timeString), "%Y-%m-%d %H:%M:%S:%Z", &timeinfo);
-  return String(timeString);
-}
-
-// Send some system statistics at most once per second
-void low_freq_stats()
-{
-  static uint32_t last_ms_low_freq = 0;
-  if (millis() - last_ms_low_freq < 1000)
-    return;
-  last_ms_low_freq = millis();
-
-  telemetry.update("Time", timeString());
-  telemetry.update("HeapMaxAlloc", String(ESP.getMaxAllocHeap()), "bytes", "np");
-  telemetry.update("PSRAMMaxAlloc", String(ESP.getMaxAllocPsram()), "bytes", "np");
-  telemetry.update("FreeHeap", String(ESP.getFreeHeap()), "bytes", "np");
-  telemetry.update("MinFreeHeap", String(ESP.getMinFreeHeap()), "bytes", "");
-  telemetry.update("FreePSRAM", String(ESP.getFreePsram()), "bytes", "np");
-  telemetry.update("MinFreePSRAM", String(ESP.getMinFreePsram()), "bytes", "");
-  telemetry.update("Uptime", String(millis() / 3600000.f), "hours", "np");
-}

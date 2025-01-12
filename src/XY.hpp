@@ -7,33 +7,33 @@ using namespace fl;
  * @enum XY_config_enum
  * @brief Configuration options for XY mapping.
  *
- * @var XY_Serpentine
+ * @var xySerpentine
  * Serpentine not raster: odd rows/columns of LEDs are reversed
  *
- * @var XY_ColumnMajor
+ * @var xyColumnMajor
  * Column-major layout: LEDs are arranged in columns not rows
  *
- * @var XY_FlipMajor
+ * @var xyFlipMajor
  * Flip major axis: reflect each panel along the major axis
  *
- * @var XY_FlipMinor
+ * @var xyFlipMinor
  * Flip minor axis: reflect each panel along the minor axis
  *
- * @var XY_SerpentineTiling
+ * @var xySerpentineTiling
  * Serpentine tiling: panels are arranged in serpentine not raster order
  *
- * @var XY_VerticalTiling
+ * @var xyVerticalTiling
  * Vertical tiling: panels are arranged in columns not rows
  */
 
 enum XY_config_enum
 {
-  XY_Serpentine = 1,
-  XY_ColumnMajor = 2,
-  XY_FlipMajor = 4,
-  XY_FlipMinor = 8,
-  XY_SerpentineTiling = 16,
-  XY_VerticalTiling = 32,
+  xySerpentine = 1,
+  xyColumnMajor = 2,
+  xyFlipMajor = 4,
+  xyFlipMinor = 8,
+  xySerpentineTiling = 16,
+  xyVerticalTiling = 32,
 };
 
 /**
@@ -55,13 +55,13 @@ uint16_t XY_panel(uint16_t x, uint16_t y, uint16_t w = 0, uint16_t h = 0)
   (void)w;
   (void)h;
   uint8_t major, minor, sz_major, sz_minor;
-  if (config & XY_ColumnMajor)
+  if (config & xyColumnMajor)
     major = y, minor = x, sz_major = height, sz_minor = width;
   else
     major = x, minor = y, sz_major = width, sz_minor = height;
-  if (config & XY_FlipMinor)
+  if (config & xyFlipMinor)
     minor = sz_minor - 1 - minor;
-  if ((config & XY_FlipMajor) ^ ((minor & 1) && (config & XY_Serpentine)))
+  if ((config & xyFlipMajor) ^ ((minor & 1) && (config & xySerpentine)))
     major = sz_major - 1 - major;
   return (uint16_t)(minor * sz_major + major);
 }
@@ -72,13 +72,13 @@ uint16_t XY_panel_const(const uint16_t x, const uint16_t y,
   (void)w;
   (void)h;
   uint8_t major, minor, sz_major, sz_minor;
-  if (config & XY_ColumnMajor)
+  if (config & xyColumnMajor)
     major = y, minor = x, sz_major = height, sz_minor = width;
   else
     major = x, minor = y, sz_major = width, sz_minor = height;
-  if (config & XY_FlipMinor)
+  if (config & xyFlipMinor)
     minor = sz_minor - 1 - minor;
-  if ((config & XY_FlipMajor) ^ ((minor & 1) && (config & XY_Serpentine)))
+  if ((config & xyFlipMajor) ^ ((minor & 1) && (config & xySerpentine)))
     major = sz_major - 1 - major;
   return (uint16_t)(minor * sz_major + major);
 }
@@ -115,8 +115,8 @@ uint16_t XY_panels(uint16_t x, uint16_t y, uint16_t w = 0, uint16_t h = 0)
   uint8_t y_panel = y / panel_height;
 
   // for serpentine layouts of panels
-  if (config & XY_SerpentineTiling)
-    if (config & XY_VerticalTiling)
+  if (config & xySerpentineTiling)
+    if (config & xyVerticalTiling)
     {
       if (x_panel & 1) // odd columns of panels are reversed
         y_panel = y_panels - 1 - y_panel;
@@ -126,7 +126,7 @@ uint16_t XY_panels(uint16_t x, uint16_t y, uint16_t w = 0, uint16_t h = 0)
 
   // find the start of this panel
   uint16_t panel_offset = panel_width * panel_height;
-  if (config & XY_VerticalTiling)
+  if (config & xyVerticalTiling)
     panel_offset *= y_panels * x_panel + y_panel;
   else
     panel_offset *= x_panels * y_panel + x_panel;
@@ -139,15 +139,15 @@ uint16_t XY_panels(uint16_t x, uint16_t y, uint16_t w = 0, uint16_t h = 0)
     return (panel_offset + XY_panel<config, panel_width, panel_height>(x, y));
 
   uint16_t major, minor, sz_major, sz_minor;
-  if (config & XY_ColumnMajor)
+  if (config & xyColumnMajor)
       major = y, minor = x, sz_major = panel_height, sz_minor = panel_width;
   else
       major = x, minor = y, sz_major = panel_width, sz_minor = panel_height;
 
-  if (config & XY_FlipMinor)
+  if (config & xyFlipMinor)
       minor = sz_minor - 1 - minor;
 
-  if ((config & XY_FlipMajor) ^ ((minor & 1) && (config & XY_Serpentine)))
+  if ((config & xyFlipMajor) ^ ((minor & 1) && (config & xySerpentine)))
       major = sz_major - 1 - major;
 
   return (panel_offset + major + minor * sz_major);
@@ -161,13 +161,13 @@ uint16_t XY_panels(uint16_t x, uint16_t y, uint16_t w = 0, uint16_t h = 0)
 template <int config>
 uint16_t XY_panel(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
   uint8_t major, minor, sz_major, sz_minor;
-  if (config & XY_ColumnMajor)
+  if (config & xyColumnMajor)
     major = y, minor = x, sz_major = height, sz_minor = width;
   else
     major = x, minor = y, sz_major = width,  sz_minor = height;
-  if (config & XY_FlipMinor)
+  if (config & xyFlipMinor)
     minor = sz_minor - 1 - minor;
-  if ((config & XY_FlipMajor) ^ ((minor & 1) && (config & XY_Serpentine)))
+  if ((config & xyFlipMajor) ^ ((minor & 1) && (config & xySerpentine)))
     major = sz_major - 1 - major;
   return (uint16_t) (minor * sz_major + major);
 }
@@ -184,8 +184,8 @@ uint16_t XY_panels(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
   uint8_t y_panel = y / panel_height;
 
   // for serpentine layouts of panels
-  if (config & XY_SerpentineTiling) {
-    if (config & XY_VerticalTiling) {
+  if (config & xySerpentineTiling) {
+    if (config & xyVerticalTiling) {
       if (x_panel & 1) // odd columns of panels are reversed
         y_panel = y_panels - 1 - y_panel;
     } else {
@@ -196,7 +196,7 @@ uint16_t XY_panels(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
 
   // find the start of this panel
   uint16_t panel_offset = panel_width * panel_height;
-  if (config & XY_VerticalTiling)
+  if (config & xyVerticalTiling)
     panel_offset *= y_panels * x_panel + y_panel;
   else
     panel_offset *= x_panels * y_panel + x_panel;
@@ -206,21 +206,35 @@ uint16_t XY_panels(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
   y %= panel_height;
 
   uint16_t major, minor, sz_major, sz_minor;
-  if (config & XY_ColumnMajor)
+  if (config & xyColumnMajor)
     major = y, minor = x, sz_major = panel_height, sz_minor = panel_width;
   else
     major = x, minor = y, sz_major = panel_width,  sz_minor = panel_height;
 
-  if (config & XY_FlipMinor)
+  if (config & xyFlipMinor)
     minor = sz_minor - 1 - minor;
 
-  if ((config & XY_FlipMajor) ^ ((minor & 1) && (config & XY_Serpentine)))
+  if ((config & xyFlipMajor) ^ ((minor & 1) && (config & xySerpentine)))
     major = sz_major - 1 - major;
 
   return (panel_offset + major + minor * sz_major);
 }
 
-///////////////////////
+////////////////////////////////////////////////////////////
+
+// select the multi-panel mapper only when it is required
+#if defined(PANEL_WIDTH) && defined(PANEL_HEIGHT) && ((PANEL_WIDTH != MATRIX_WIDTH) || (PANEL_HEIGHT != MATRIX_HEIGHT))
+XYMap xyMap = XYMap::constructWithUserFunction(
+    MATRIX_WIDTH, MATRIX_HEIGHT,
+    XY_panels<XY_CONFIG, MATRIX_WIDTH, MATRIX_HEIGHT, PANEL_WIDTH, PANEL_HEIGHT>);
+#else
+XYMap xyMap = XYMap::constructWithUserFunction(
+    MATRIX_WIDTH, MATRIX_HEIGHT,
+    XY_panel<XY_CONFIG, MATRIX_WIDTH, MATRIX_HEIGHT>);
+#endif
+
+////////////////////////////////////////////////////////////
+
 
 #if true
 /**
@@ -230,7 +244,7 @@ uint16_t XY_panels(uint16_t x, uint16_t y, uint16_t width, uint16_t height) {
  * and prints the time taken and the sum of the indices to the Serial output.
  */
 
-void benchmark_xymaps() {
+void benchmarkXYmaps() {
   XYMap xyMapRectGrid = XYMap::constructRectangularGrid(64, 64);
   XYMap xyMapPanel = XYMap::constructWithUserFunction(64, 64, XY_panel<XY_CONFIG>);
   XYMap xyMapPanel_wh = XYMap::constructWithUserFunction(64, 64, XY_panel<XY_CONFIG, 64, 64>);
