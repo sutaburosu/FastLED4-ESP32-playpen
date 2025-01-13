@@ -23,10 +23,11 @@
 
 using namespace fl;
 
+CRGB leds[NUM_LEDS + 1]; // + 1 for the onboard LED on pin 48
 UITitle title("sutaburosu's FastLED 4 ESP32 Playpen");
 UIDescription description("Making a mess with FastLED 4, ESP32, and some other stuff");
 UISlider brightness("Brightness", BRIGHTNESS, 0, 255);
-UINumberField fxIndex("Animartrix - index", FIRST_ANIMATION, 0, NUM_ANIMATIONS - 1);
+UINumberField fxIndex("Animartrix index", FIRST_ANIMATION, 0, NUM_ANIMATIONS - 1);
 UISlider timeSpeed("Time Speed", 2, -10, 10, .1);
 UICheckbox switchFx("Switch Fx", true);
 
@@ -36,7 +37,6 @@ NoisePalette noisePalette2(xyMap);
 FxEngine fxEngine(NUM_LEDS);
 
 LD2450 ld2450;
-CRGB leds[NUM_LEDS + 1]; // + 1 for the onboard LED on pin 48
 
 void setup()
 {
@@ -69,7 +69,7 @@ void setup()
   if (ld2450.read() < 4)
     Serial.printf("LD2450 radar active");
 
-  // Set custom parameters for a few telemetry data points
+  // Set custom parameters for some telemetry data points
   telemetry.add("draw", {.minMs = 100, .unit = "ms", .teleplot = ""});
   telemetry.add("show", {.minMs = 100, .unit = "ms", .teleplot = ""});
   telemetry.add("nonFastLED", {.minMs = 100, .unit = "ms", .teleplot = ""});
@@ -142,12 +142,12 @@ void loop()
     // It might be useful for effects to know when WiFi connects...
   }
 
-  // Gather loop() timing data, and send telemetry at most 5 times per second
+  // Gather loop() timing data at most 5 times per second
   µsSamples++;
   uint64_t µsElapsed = micros() - µsStart;
-  float divisor = 1000.f * µsSamples;
   if (µsElapsed >= 200000)
   {
+    float divisor = 1000.f * µsSamples;
     uint64_t µsNonFastLED = µsElapsed - µsDraw - µsShow;
     telemetry.add("draw", String(µsDraw / divisor));
     telemetry.add("show", String(µsShow / divisor));

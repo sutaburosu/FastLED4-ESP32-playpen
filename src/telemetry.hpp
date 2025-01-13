@@ -33,15 +33,23 @@ struct TelemetryDatum
   bool sanitise = true;   // replace : and | with Unicode characters
 };
 
-// Store Teleplot-compatible telemetry data, where each datum has it's own
-// sending interval. Periodically coalesce only changed values, and send them
-// in chunks over Serial and/or UDP to Teleplot, or just a terminal or netcat
-// (e.g. `nc -l -u -p 47269`).
+// Holds a log entry   TODO a circular buffer? is there a benefit over a deque?
+struct TelemetryLog
+{
+  uint32_t timestamp; // when the log entry was created
+  String message;     // the log entry
+};
+
+// Store Teleplot-compatible, human-readable telemetry data, where each datum
+// may have unique sending intervals, units, etc. Periodically coalesce only
+// changed values into a report. Send them over Serial without blocking and/or
+// UDP to Teleplot. Or just a terminal and/or netcat (e.g. `nc -l -u -p 47269`).
 struct Telemetry
 {
   std::map<String, TelemetryDatum> telemetryData;
   std::deque<String> serialQueue;
   std::deque<String> udpQueue;
+  std::deque<TelemetryLog> logQueue;
 
   const int udpMaxPayload = 1024; // max payload size for UDP telemetry
   int udpSocket = -1;             // a socket for sending UDP telemetry
@@ -107,7 +115,7 @@ struct Telemetry
       String report = kv.first + ":" + value;
 
       if (td.unit.length())
-        report += "§" + td.unit;
+        report += "§" + td.unit; // U+00A7 SECTION SIGN
       if (td.teleplot.length())
         report += "|" + td.teleplot;
       report += "\n";
@@ -215,7 +223,7 @@ struct Telemetry
       udpSockAddr.sin_family = AF_INET;
       udpSockAddr.sin_port = htons(preferences.getUInt("telemetry_port", 47269));
       udpSockAddr.sin_len = sizeof(udpSockAddr);
-      String host = preferences.getString("telemetry_host", "192.168.1.194");
+      String host = preferences.getString("telemetry_host", "");
       const char *host_cstr = host.c_str();
       int res = inet_aton(host_cstr, &udpSockAddr.sin_addr);
       if (1 != res)
@@ -296,14 +304,15 @@ struct Telemetry
   void begin()
   {
     add("Heap Free", {.maxMs = 5000, .unit = "KiB", .teleplot = ""});
-    add("Heap Min", {.maxMs = 5000});
-    add("Heap Max", {.maxMs = 5000});
+    add("Heap Min", {.maxMs = 5000}); // unit is omitted due to layout
+    add("Heap Max", {.maxMs = 5000}); // problems stacking graphs in Teleplot
     add("PS Free", {.maxMs = 5000, .unit = "KiB", .teleplot = ""});
     add("PS Min", {.maxMs = 5000});
     add("PS Max", {.maxMs = 5000});
     add("Uptime", {.unit = "hours"});
     add("Time", {.teleplot = "t,np"});
     add("RSSI", {.unit = "dBm"});
+    sysStats(); // an early heap free reading can be useful
   }
 
   // Send some system statistics at most once per second each

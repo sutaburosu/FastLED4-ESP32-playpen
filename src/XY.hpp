@@ -48,7 +48,7 @@ enum XY_config_enum
  * @param h Height (unused).
  * @return uint16_t Linear index corresponding to the (x, y) coordinates.
  */
-
+// TODO experiment with size explosion from templates
 template <int config, uint16_t width, uint16_t height>
 uint16_t XY_panel(uint16_t x, uint16_t y, uint16_t w = 0, uint16_t h = 0)
 {

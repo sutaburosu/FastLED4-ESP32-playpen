@@ -19,7 +19,8 @@ struct Flags
 // Your preferences will be saved in the NVS partition, so will persist
 // across reboots, firmware updates, and even flashing other sketches. They are
 // lost when the NVS partition is erased or the partition table layout changed.
-void preferencesStore() {
+void storePreferences()
+{
   // preferences.clear(); // uncomment this line to clear all stored preferences
 
   return; // comment out this line to set your preferences
@@ -28,9 +29,9 @@ void preferencesStore() {
   preferences.putString("wifi_hostname", "esp32-s3-playpen");
   preferences.putString("ntp_server1", "time.cloudflare.com");
   preferences.putUInt("baudrate", 115200);
-  preferences.putBool("serialTelemetry", false);  // send stats via Serial
-  preferences.putBool("udpTelemetry", true);      // send stats via UDP
-  preferences.putUInt("telemetry_port", 47269);   // port your PC listens on
+  preferences.putBool("serialTelemetry", false); // send stats via Serial
+  preferences.putBool("udpTelemetry", true);     // send stats via UDP
+  preferences.putUInt("telemetry_port", 47269);  // port your PC listens on
   preferences.putString("telemetry_host", "your_pc_ip_address");
 
   // Find the string for your timezone here:
@@ -50,9 +51,7 @@ void preferencesStore() {
 void preferencesBegin()
 {
   preferences.begin("FastLED-playpen");
+  storePreferences();
   flags.serialTelemetry = preferences.getBool("serialTelemetry", true);
   flags.udpTelemetry = preferences.getBool("udpTelemetry", false);
-
-  preferencesStore();
 }
-
