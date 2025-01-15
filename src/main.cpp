@@ -34,6 +34,7 @@ UICheckbox switchFx("Switch Fx", true);
 Animartrix animartrix(xyMap, FIRST_ANIMATION);
 NoisePalette noisePalette1(xyMap);
 NoisePalette noisePalette2(xyMap);
+FxSui fxSui(xyMap);
 FxEngine fxEngine(NUM_LEDS);
 
 LD2450 ld2450;
@@ -58,6 +59,7 @@ void setup()
   fxEngine.addFx(animartrix);
   fxEngine.addFx(noisePalette1);
   fxEngine.addFx(noisePalette2);
+  fxEngine.addFx(fxSui);
   noisePalette1.setPalettePreset(1);
   noisePalette1.setSpeed(3);
   noisePalette1.setScale(10);

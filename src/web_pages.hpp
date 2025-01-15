@@ -1,7 +1,8 @@
 #pragma once
+#include "preferences.hpp"
+#include "wifi.hpp"
 #include <ESPAsyncWebServer.h>
 #include <ElegantOTA.h>
-#include "preferences.hpp"
 
 const char* indexContent = 
 /* html */

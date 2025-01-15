@@ -13,14 +13,14 @@
 #include <fx/2d/noisepalette.h>
 #include <fx/2d/animartrix.hpp>
 
-#include "preferences.hpp"
-#include "telemetry.hpp"
-#include "wifi.hpp"
-#include "XY.hpp"
 #include "LD2450.h"
+#include "XY.hpp"
+#include "fxSui.hpp"
+#include "preferences.hpp"
 #include "radar.hpp"
+#include "telemetry.hpp"
 #include "web_pages.hpp"
-#include "fxWater.hpp"
+#include "wifi.hpp"
 
 // TODO Is there still no way to directly embed a binary file in C++23‽ C23 has it.
 // 
