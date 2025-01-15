@@ -1,5 +1,5 @@
-// TODO add pause and resume methods and free memory when paused?
 /*
+
   This is a 2D FastLED FX engine effect which draws a water ripple effect.
 
   It is derived from the FastLED example "FxWater" so I had to pick a name
@@ -19,6 +19,7 @@
 #include "fl/xymap.h"
 #include "fx/fx2d.h"
 
+// TODO add pause and resume methods and free memory when paused?
 namespace fl {
 FASTLED_SMART_PTR(FxSui);
 
@@ -101,20 +102,19 @@ void FxSui::draw(DrawContext context) {
 
     // add random drops
     if (random8() > 200) {
-        x = 256 + width * random8();
+        x = 256 + width * random8(); // not `wwidth`; we want wwidth-2
         y = 256 + height * random8();
-        uint16_t xy = (x >> 8) + wwidth * (y >> 8);
         // but only place it if the spot is dark
-        if (1 >= buffptr[xy])
-            buffptr[xy] = 255;
-        wuPixel(x, y, 64);
+        uint16_t xy = (x >> 8) + wwidth * (y >> 8);
+        if (!buffptr[xy])
+            wuPixel(x, y, 64);
     }
 
     // advance the water simulation forwards a single step
     advanceWater();
 
-    // swapping the buffers here allows folks to paint into the next frame's
-    // water buffer with wuPixel() from their sketch.
+    // swapping here allows painting into the next frame's water buffer with
+    // FxSui::wuPixel() before calling FxEngine::draw().
     swapBuffers();
 
     // map the water buffer to the LED array
@@ -127,6 +127,7 @@ void FxSui::draw(DrawContext context) {
             uint16_t xy = xyMap(x, y);
             leds[xy] = ColorBlend(RainbowColors_p, pal_offset + (*input << 5),
                                   *input, LINEARBLEND);
+            input++;
         }
     }
 }
@@ -160,34 +161,32 @@ void FxSui::setPerimeter() {
     }
 }
 
-// draw a blob of 4 pixels with their relative brightnesses conveying
-// sub-pixel positioning
+// Calculate the Wu weight for a pair of values.
 uint8_t const FxSui::wuWeight(uint8_t const a, uint8_t const b) {
     return (uint8_t)((a * b + a + b) >> 8);
 }
+// Draw a blob of 4 pixels with their relative brightnesses conveying subpixel
+// information. This is the Wu antialiased pixel plotting algorithm.
 void FxSui::wuPixel(uint16_t x, uint16_t y, uint8_t bright) {
-    // Avoid painting on the border of the water buffer
-    if (x < 256 || y < 256 || x >= (wwidth - 256) << 8 ||
-        y >= (wheight - 256) << 8)
+    // Nothing to plot within the perimeter?
+    if (x >= (wwidth - 1) << 8 || y >= (wheight - 1) << 8)
         return;
-    return;
     // extract the fractional parts and derive their inverses
     uint8_t xx = x & 0xff, yy = y & 0xff, ix = 255 - xx, iy = 255 - yy;
     // calculate the intensities for each affected pixel
     uint8_t wu[4]{wuWeight(ix, iy), wuWeight(xx, iy),  // pixel0, pixel1
                   wuWeight(ix, yy), wuWeight(xx, yy)}; // pixel2, pixel3
-    // multiply the intensities by the colour, and saturating-add them to
-    // the pixels
     for (uint8_t i = 0; i < 4; i++) {
         uint8_t local_x = (x >> 8) + (i & 1);
-        if (local_x >= wwidth - 1)
+        if (!local_x || local_x >= wwidth - 1) // clip left and right
             continue;
         uint8_t local_y = (y >> 8) + ((i >> 1) & 1);
-        if (local_y >= wheight - 1)
+        if (!local_y || local_y >= wheight - 1) // clip top and bottom
             continue;
         uint16_t xy = wwidth * local_y + local_x;
-        uint16_t this_bright = bright * wu[i];
-        buffptr[xy] = qadd8(buffptr[xy], this_bright >> 8);
+        // scale by the Wu weight, and saturating-add to the buffer
+        uint16_t scaled = bright * wu[i];
+        buffptr[xy] = qadd8(buffptr[xy], scaled >> 8);
     }
 }
 
@@ -199,7 +198,7 @@ void FxSui::advanceWater() {
         dst = src + wsize;
     } else {
         dst = src;
-        src += wsize; // swap buffers
+        src += wsize;
     }
 
     src += wwidth - 1;

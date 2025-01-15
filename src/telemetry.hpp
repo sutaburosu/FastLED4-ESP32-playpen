@@ -33,7 +33,7 @@ struct TelemetryDatum
   bool sanitise = true;   // replace : and | with Unicode characters
 };
 
-// Holds a log entry   TODO a circular buffer? is there a benefit over a deque?
+// Holds a log entry
 struct TelemetryLog
 {
   uint32_t timestamp; // when the log entry was created
@@ -76,11 +76,12 @@ struct Telemetry
       it->second.value = value;
   }
 
-  // Teleplot doesn't like : or | in values
+  // Teleplot doesn't like :|; in values
   void sanitiseValue(String &value)
   {
-    value.replace(":", "﹕"); // U+FE55 SMALL COLON
-    value.replace("|", "｜"); // U+FF1C FULLWIDTH VERTICAL LINE
+      value.replace(":", "∶"); // U+2236 Ratio
+      value.replace("|", "∣"); // U+2223 Divides
+      value.replace(";", "⁏"); // U+204F Reversed Semicolon
   }
 
   // Every 200ms get changed values, format for Teleplot, and queue to be sent
@@ -138,11 +139,16 @@ struct Telemetry
 
   void send()
   {
-    if (!flags.udpTelemetry && !flags.serialTelemetry)
-    {
-      serialQueue.clear();
-      udpQueue.clear();
-      return;
+      // Limit to 10Hz
+      static uint32_t lastSend = 0;
+      if (millis() - lastSend < 100)
+          return;
+      lastSend = millis();
+
+      if (!flags.udpTelemetry && !flags.serialTelemetry) {
+          serialQueue.clear();
+          udpQueue.clear();
+          return;
     }
 
     coalesceChanges();
