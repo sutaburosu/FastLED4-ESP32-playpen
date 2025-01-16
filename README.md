@@ -1,16 +1,17 @@
 # FastLED4-ESP32-playpen
 
-## FastLED 4 new features
+## More and better hardware drivers in FastLED 4
 There are many great new features in FastLED 4 which each bring major
 improvements compared to FastLED 3.8.
 
  * There are several new output drivers, making FastLED 4 the best choice of
    library for driving vast numbers of LEDs on many modern MCUs.
- * Several of FastLED's existing drivers are now asynchronous, so your sketch
+ * Some of FastLED's existing drivers are now asynchronous, so your sketch
    can do other things whilst the LED data is sent in the background.
- * FastLED can now overclock your LEDs, so you can get more frames per second
-   out of them. There are reports of 40-60% more FPS with the same LEDs. My LEDs
-   can go 42% faster with FastLED using the simple #define, but 65%
+ * On some platforms FastLED can now overclock your LEDs, so you can get more
+   frames per second out of them. There are reports of 40-60% more FPS with the
+   same LEDs. My LEDs can go 42% faster with FastLED using the simple #define,
+   but 65%
    [with my own code](https://gist.github.com/sutaburosu/89920c71a9635fec595e243fa6e7360e).
    **TODO** I don't understand what I should set T1, T2, T3 to for FastLED to
    achieve the same 250/500 500/250ns timings. This was discussed in an issue;
