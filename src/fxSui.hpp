@@ -1,12 +1,12 @@
 /*
 
-  This is a 2D FastLED FX engine effect which draws a water ripple effect.
+This is a 2D FastLED FX engine effect which draws a water ripple effect.
 
-  It is derived from the FastLED example "FxWater" so I had to pick a name
-  that was not already taken. I chose 水 (sui) which means water.
+It is derived from the FastLED example "FxWater" so I had to pick a name
+that was not already taken. I chose 水 (sui) which means water.
 
-  The water ripple effect is based on the algorithm described here:
-  https://web.archive.org/web/20160418004149/http://freespace.virgin.net/hugo.elias/graphics/x_water.htm
+The water ripple effect is based on the algorithm described here:
+https://web.archive.org/web/20160418004149/http://freespace.virgin.net/hugo.elias/graphics/x_water.htm
 
 */
 
@@ -70,14 +70,15 @@ class FxSui : public Fx2d {
 
     // More methods are defined below this Class declaration
     void setEdgeDamping(uint8_t value);
+    void waveTank();
     void draw(DrawContext context) override;
     void wuPixel(uint16_t x, uint16_t y, uint8_t bright);
     CRGB ColorBlend(const TProgmemRGBPalette16 pal, uint16_t index,
                     uint8_t brightness, TBlendType blendType);
 };
 
+// Swap the src/dest buffers on each frame
 void FxSui::swapBuffers() {
-    // swap the src/dest buffers on each frame
     uint8_t *const bufA = water.get() + (buffer ? wsize : 0);
     buffer = !buffer;
     buffptr = bufA;
@@ -90,7 +91,9 @@ void FxSui::draw(DrawContext context) {
         return;
     }
 
-    // add a moving stimulus
+    waveTank();
+
+    // Add a moving stimulus
     phase[0] += beatsin16(9, 500, 1800);
     phase[1] += beatsin16(7, 500, 1500);
     phase[2] += beatsin16(2, 500, 5000);
@@ -100,7 +103,7 @@ void FxSui::draw(DrawContext context) {
     uint8_t z = 127 + ((sin16(phase[2]) + 32768) >> 9);
     wuPixel(x, y, z);
 
-    // add random drops
+    // Add random drops
     if (random8() > 200) {
         x = 256 + width * random8(); // not `wwidth`; we want wwidth-2
         y = 256 + height * random8();
@@ -110,14 +113,14 @@ void FxSui::draw(DrawContext context) {
             wuPixel(x, y, 64);
     }
 
-    // advance the water simulation forwards a single step
+    // Advance the water simulation forwards a single step
     advanceWater();
 
-    // swapping here allows painting into the next frame's water buffer with
+    // Swapping here allows painting into the next frame's water buffer with
     // FxSui::wuPixel() before calling FxEngine::draw().
     swapBuffers();
 
-    // map the water buffer to the LED array
+    // Map the water buffer to the LED array
     static uint16_t pal_offset = 0; // TODO - make this a member variable?
     uint8_t *input = buffptr + wwidth - 1;
     pal_offset += 96;
@@ -126,8 +129,8 @@ void FxSui::draw(DrawContext context) {
         for (uint8_t x = 0; x < width; x++) {
             uint16_t xy = xyMap(x, y);
             leds[xy] = ColorFromPaletteExtended(
-                (const CRGBPalette16&)RainbowColors_p,
-                uint16_t(pal_offset + (*input << 5)), *input, LINEARBLEND);
+                (const CRGBPalette16 &)RainbowColors_p,
+                uint16_t(pal_offset + (*input << 6)), *input, LINEARBLEND);
             input++;
         }
     }
@@ -162,6 +165,74 @@ void FxSui::setPerimeter() {
     }
 }
 
+// Wave tank simulation? We'll find out soon enough… Yes! That works.
+void FxSui::waveTank() {
+    uint16_t theta = 327.675f * (1.0f + sin(millis() / 300.f));
+
+    // Calculate the length of the perimeter
+    uint16_t perimeterLength = 2 * (width + height - 2);
+    // Calculate the number of waves in the perimeter
+    uint16_t dtheta = 65536 / perimeterLength;
+
+    uint16_t value;
+    if (1) {
+        // // top
+        // for (int i = 0; i < wwidth; i++) {
+        //     value = cos8(theta) / 3, theta += dtheta;
+        //     water[i] = value;
+        //     water[i + wsize] = value;
+        // }
+        // // right
+        // for (int i = 1; i < wheight - 1; i++) {
+        //     value = cos8(theta) / 3, theta += dtheta;
+        //     int j = wwidth - 1 + i * wwidth;
+        //     water[j] = value;
+        //     water[j + wsize] = value;
+        // }
+        // bottom
+        for (int i = wwidth - 1; i >= 0; i--) {
+            value = cos8(theta) / 3, theta += dtheta;
+            int j = i + wwidth * (wheight - 1);
+            water[j] = value;
+            water[j + wsize] = value;
+        }
+        // // left
+        // for (int i = wheight - 2; i >= 1; i--) {
+        //     value = cos8(theta) / 3, theta += dtheta;
+        //     int j = i * wwidth;
+        //     water[j] = value;
+        //     water[j + wsize] = value;
+        // }
+    } else { // top
+        for (int i = 1; i < wwidth - 1; i++) {
+            value = cos8(theta), theta += dtheta;
+            water[i] = value;
+            water[i + wsize] = value;
+        }
+        // right
+        for (int i = 2; i < wheight - 2; i++) {
+            value = cos8(theta), theta += dtheta;
+            int j = wwidth - 2 + i * wwidth;
+            water[j] = value;
+            water[j + wsize] = value;
+        }
+        // bottom
+        for (int i = wwidth - 2; i >= 1; i--) {
+            value = cos8(theta), theta += dtheta;
+            int j = i + wwidth * (wheight - 2);
+            water[j] = value;
+            water[j + wsize] = value;
+        }
+        // left
+        for (int i = wheight - 3; i >= 2; i--) {
+            value = cos8(theta), theta += dtheta;
+            int j = 1 + i * wwidth;
+            water[j] = value;
+            water[j + wsize] = value;
+        }
+    }
+}
+
 // Calculate the Wu weight for a pair of values.
 uint8_t const FxSui::wuWeight(uint8_t const a, uint8_t const b) {
     return (uint8_t)((a * b + a + b) >> 8);
@@ -175,8 +246,8 @@ void FxSui::wuPixel(uint16_t x, uint16_t y, uint8_t bright) {
     // extract the fractional parts and derive their inverses
     uint8_t xx = x & 0xff, yy = y & 0xff, ix = 255 - xx, iy = 255 - yy;
     // calculate the intensities for each affected pixel
-    uint8_t wu[4]{wuWeight(ix, iy), wuWeight(xx, iy),  // pixel0, pixel1
-                  wuWeight(ix, yy), wuWeight(xx, yy)}; // pixel2, pixel3
+    uint8_t wu[4]{wuWeight(ix, iy), wuWeight(xx, iy),  // top left, top right
+                  wuWeight(ix, yy), wuWeight(xx, yy)}; // btm left, btm right
     for (uint8_t i = 0; i < 4; i++) {
         uint8_t local_x = (x >> 8) + (i & 1);
         if (!local_x || local_x >= wwidth - 1) // clip left and right
