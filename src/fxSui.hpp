@@ -27,16 +27,18 @@ FASTLED_SMART_PTR(FxSui);
 class FxSui : public Fx2d {
   private:
     // Private variables and methods can only be used within this class
-    uint16_t width;                  // width of the XYMap
-    uint16_t height;                 // height of the XYMap
-    uint32_t wwidth;                 // width of the water buffer
-    uint32_t wheight;                // height of the water buffer
-    uint32_t wsize;                  // size of a single water buffer
-    fl::scoped_array<uint8_t> water; // temporary buffer for water simulation
-    uint8_t edgeDamping;             // affects reflections at the edges
-    bool buffer = false;             // used to swap buffers on each frame
-    uint16_t phase[3];               // phase offsets for the moving stimulus
-    uint8_t *buffptr = nullptr;      // pointer to the water buffer
+    uint16_t width;                   // width of the XYMap
+    uint16_t height;                  // height of the XYMap
+    uint32_t wwidth;                  // width of the water buffer
+    uint32_t wheight;                 // height of the water buffer
+    uint32_t wsize;                   // size of a single water buffer
+    fl::scoped_array<uint8_t> waterA; // temporary buffer for water simulation
+    fl::scoped_array<uint8_t> waterB; // temporary buffer for water simulation
+    uint8_t edgeDamping;              // affects reflections at the edges
+    bool buffer = false;              // used to swap buffers on each frame
+    uint16_t phase[3];                // phase offsets for the moving stimulus
+    uint8_t *buffptr[2];              // pointer to the water buffer
+    uint16_t tankPhase = 0;           // phase offset for the wave tank
 
     // These methods are defined below this Class declaration
     void setPerimeter();
@@ -56,9 +58,10 @@ class FxSui : public Fx2d {
         wwidth = width + 2;
         wheight = height + 2;
         wsize = wwidth * wheight;
-        water.reset(new uint8_t[2 * wsize]);
-        buffptr = water.get();
-        setPerimeter();
+        waterA.reset(new uint8_t[wsize]);
+        waterB.reset(new uint8_t[wsize]);
+        // flags.movingStimulus = true;
+        flags.randomDrops = true;
         swapBuffers();
     }
 
@@ -67,6 +70,17 @@ class FxSui : public Fx2d {
 
     // What is the name of the effect?
     fl::Str fxName() const override { return "水 (sui) — water"; }
+
+    // Flags to enable various plotting options
+    struct Flags {
+        bool movingStimulus : 1; // add a moving stimulus
+        bool randomDrops : 1;    // add random drops
+        bool waveTop : 1;        // wave generator at the top
+        bool waveRight : 1;      // wave generator at the right
+        bool waveBottom : 1;     // wave generator at the bottom
+        bool waveLeft : 1;       // wave generator at the left
+    };
+    Flags flags;
 
     // More methods are defined below this Class declaration
     void setEdgeDamping(uint8_t value);
@@ -79,9 +93,16 @@ class FxSui : public Fx2d {
 
 // Swap the src/dest buffers on each frame
 void FxSui::swapBuffers() {
-    uint8_t *const bufA = water.get() + (buffer ? wsize : 0);
+    uint8_t *const bufA = waterA.get();
+    uint8_t *const bufB = waterB.get();
+    if (buffer) {
+        buffptr[0] = bufB;
+        buffptr[1] = bufA;
+    } else {
+        buffptr[0] = bufA;
+        buffptr[1] = bufB;
+    }
     buffer = !buffer;
-    buffptr = bufA;
 }
 
 // Called by the FX engine when it needs us to draw a frame
@@ -94,35 +115,48 @@ void FxSui::draw(DrawContext context) {
     waveTank();
 
     // Add a moving stimulus
-    phase[0] += beatsin16(9, 500, 1800);
-    phase[1] += beatsin16(7, 500, 1500);
-    phase[2] += beatsin16(2, 500, 5000);
-    uint16_t x = 256 + ((uint32_t(width - 2) * (sin16(phase[0]) + 32768)) >> 8);
-    uint16_t y =
-        256 + ((uint32_t(height - 2) * (sin16(phase[1]) + 32768)) >> 8);
-    uint8_t z = 127 + ((sin16(phase[2]) + 32768) >> 9);
-    wuPixel(x, y, z);
+    if (flags.movingStimulus) {
+        phase[0] += beatsin16(9, 500, 1800);
+        phase[1] += beatsin16(7, 500, 1500);
+        phase[2] += beatsin16(2, 500, 5000);
+        uint16_t x =
+            256 + ((uint32_t(width - 2) * (sin16(phase[0]) + 32768)) >> 8);
+        uint16_t y =
+            256 + ((uint32_t(height - 2) * (sin16(phase[1]) + 32768)) >> 8);
+        uint8_t z = 127 + ((sin16(phase[2]) + 32768) >> 9);
+        wuPixel(x, y, z);
+    }
 
     // Add random drops
-    if (random8() > 200) {
-        x = 256 + width * random8(); // not `wwidth`; we want wwidth-2
-        y = 256 + height * random8();
-        // but only place it if the spot is dark
-        uint16_t xy = (x >> 8) + wwidth * (y >> 8);
-        if (!buffptr[xy])
-            wuPixel(x, y, 64);
+    if (flags.randomDrops) {
+        static uint32_t nextMs = 0; // time of last drop
+        static uint16_t lastX = 0, lastY = 0;
+        if (millis() > nextMs) {
+            int x, y, dx, dy, dist, tries = 4;
+            do {
+                x = 256 + random16(width * 256);
+                y = 256 + random16(height * 256);
+                dx = abs(lastX - x), dy = abs(lastY - y);
+                dist = sqrt(dx * dx + dy * dy);
+            } while (dist < width * 100 && --tries);
+            if (tries) {
+                wuPixel(x, y, 255);
+                lastX = x, lastY = y;
+                nextMs = millis() + random8();
+            }
+        }
     }
 
     // Advance the water simulation forwards a single step
     advanceWater();
 
     // Swapping here allows painting into the next frame's water buffer with
-    // FxSui::wuPixel() before calling FxEngine::draw().
+    // sui.wuPixel() before calling fxEngine.draw().
     swapBuffers();
 
     // Map the water buffer to the LED array
     static uint16_t pal_offset = 0; // TODO - make this a member variable?
-    uint8_t *input = buffptr + wwidth - 1;
+    uint8_t *input = buffptr[0] + wwidth - 1;
     pal_offset += 96;
     for (uint8_t y = 0; y < height; y++) {
         input += 2;
@@ -130,7 +164,7 @@ void FxSui::draw(DrawContext context) {
             uint16_t xy = xyMap(x, y);
             leds[xy] = ColorFromPaletteExtended(
                 (const CRGBPalette16 &)RainbowColors_p,
-                uint16_t(pal_offset + (*input << 6)), *input, LINEARBLEND);
+                uint16_t(pal_offset + (*input << 5)), *input, LINEARBLEND);
             input++;
         }
     }
@@ -138,98 +172,58 @@ void FxSui::draw(DrawContext context) {
 
 // Set damping values for the perimeter of the water buffer.
 // This affects how waves reflect off the edges.
-void FxSui::setEdgeDamping(uint8_t value) {
-    edgeDamping = value;
-    setPerimeter();
-}
-
-// Paint the perimeter of both water buffers
-void FxSui::setPerimeter() {
-    uint8_t value = 255 - edgeDamping;
-    // top and bottom
-    for (int i = 0; i < wwidth; i++) {
-        water[i] = value;
-        water[i + wsize] = value;
-        int j = i + wwidth * (wheight - 1);
-        water[j] = value;
-        water[j + wsize] = value;
-    }
-    // left and right
-    for (int i = 1; i < wheight - 1; i++) {
-        int j = i * wwidth;
-        water[j] = value;
-        water[j + wsize] = value;
-        j += wwidth - 1;
-        water[j] = value;
-        water[j + wsize] = value;
-    }
-}
+void FxSui::setEdgeDamping(uint8_t value) { edgeDamping = value; }
 
 // Wave tank simulation? We'll find out soon enough… Yes! That works.
+// Haha, even beam-forming works. This algorithm is awesome. Thanks, Hugo et al.
 void FxSui::waveTank() {
+    tankPhase += 800;
     uint16_t theta = 327.675f * (1.0f + sin(millis() / 300.f));
 
     // Calculate the length of the perimeter
     uint16_t perimeterLength = 2 * (width + height - 2);
-    // Calculate the number of waves in the perimeter
-    uint16_t dtheta = 65536 / perimeterLength;
+    // Stretch a single cycle of cos8() around the perimeter
+    uint16_t dtheta = 8 * (65536 / perimeterLength) / 256;
 
+    // top
     uint16_t value;
-    if (1) {
-        // // top
-        // for (int i = 0; i < wwidth; i++) {
-        //     value = cos8(theta) / 3, theta += dtheta;
-        //     water[i] = value;
-        //     water[i + wsize] = value;
-        // }
-        // // right
-        // for (int i = 1; i < wheight - 1; i++) {
-        //     value = cos8(theta) / 3, theta += dtheta;
-        //     int j = wwidth - 1 + i * wwidth;
-        //     water[j] = value;
-        //     water[j + wsize] = value;
-        // }
-        // bottom
-        for (int i = wwidth - 1; i >= 0; i--) {
+    for (int i = wwidth - 1; i >= 0; i--) {
+        if (flags.waveTop)
             value = cos8(theta) / 3, theta += dtheta;
-            int j = i + wwidth * (wheight - 1);
-            water[j] = value;
-            water[j + wsize] = value;
-        }
-        // // left
-        // for (int i = wheight - 2; i >= 1; i--) {
-        //     value = cos8(theta) / 3, theta += dtheta;
-        //     int j = i * wwidth;
-        //     water[j] = value;
-        //     water[j + wsize] = value;
-        // }
-    } else { // top
-        for (int i = 1; i < wwidth - 1; i++) {
-            value = cos8(theta), theta += dtheta;
-            water[i] = value;
-            water[i + wsize] = value;
-        }
-        // right
-        for (int i = 2; i < wheight - 2; i++) {
-            value = cos8(theta), theta += dtheta;
-            int j = wwidth - 2 + i * wwidth;
-            water[j] = value;
-            water[j + wsize] = value;
-        }
-        // bottom
-        for (int i = wwidth - 2; i >= 1; i--) {
-            value = cos8(theta), theta += dtheta;
-            int j = i + wwidth * (wheight - 2);
-            water[j] = value;
-            water[j + wsize] = value;
-        }
-        // left
-        for (int i = wheight - 3; i >= 2; i--) {
-            value = cos8(theta), theta += dtheta;
-            int j = 1 + i * wwidth;
-            water[j] = value;
-            water[j + wsize] = value;
-        }
+        else
+            value = 255 - edgeDamping;
+        int j = i + wwidth * (wheight - 1);
+        buffptr[0][j] = value;
+        // buffptr[1][j] = value;
+    }
+    // right
+    for (int i = 1; i < wheight - 1; i++) {
+        if (flags.waveRight)
+            value = cos8(theta) / 3, theta += dtheta;
+        else
+            value = 255 - edgeDamping;
+        int j = wwidth - 1 + i * wwidth;
+        buffptr[0][j] = value;
+        // buffptr[1][j] = value;
+    }
+    // bottom
+    for (int i = 0; i < wwidth; i++) {
+        if (flags.waveBottom)
+            value = cos8(theta) / 3, theta += dtheta;
+        else
+            value = 255 - edgeDamping;
+        buffptr[0][i] = value;
+        // buffptr[1][i] = value;
+    }
+    // left
+    for (int i = wheight - 2; i >= 1; i--) {
+        if (flags.waveLeft)
+            value = cos8(theta) / 3, theta += dtheta;
+        else
+            value = 255 - edgeDamping;
+        int j = i * wwidth;
+        buffptr[0][j] = value;
+        // buffptr[1][j] = value;
     }
 }
 
@@ -258,20 +252,14 @@ void FxSui::wuPixel(uint16_t x, uint16_t y, uint8_t bright) {
         uint16_t xy = wwidth * local_y + local_x;
         // scale by the Wu weight, and saturating-add to the buffer
         uint16_t scaled = bright * wu[i];
-        buffptr[xy] = qadd8(buffptr[xy], scaled >> 8);
+        buffptr[0][xy] = qadd8(buffptr[0][xy], scaled >> 8);
     }
 }
 
 // Advance the water simulation by one frame
 void FxSui::advanceWater() {
-    uint8_t *src = water.get();
-    uint8_t *dst;
-    if (buffer) {
-        dst = src + wsize;
-    } else {
-        dst = src;
-        src += wsize;
-    }
+    uint8_t *src = buffptr[0];
+    uint8_t *dst = buffptr[1];
 
     src += wwidth - 1;
     dst += wwidth - 1;
@@ -280,7 +268,7 @@ void FxSui::advanceWater() {
         dst += 2;
         for (uint8_t x = 1; x < wwidth - 1; x++) {
             // This is slightly different to the Elias algorithm.
-            // Rather than negative values clamping at 0, this reflect off 0.
+            // Rather than negative values clamping at 0, this reflects off 0.
             // It preserves a tiny bit more information in the water buffers.
             uint16_t t = 64 * (src[-1] + src[1] + src[-wwidth] + src[wwidth]);
             uint16_t bigdst = *dst * 128;

@@ -62,6 +62,14 @@ void setup() {
     fxEngine.addFx(noisePalette1);
     fxEngine.addFx(noisePalette2);
     fxEngine.addFx(fxSui);
+    fxSui.setEdgeDamping(255);
+    // fxSui.setMovingStimulus(false);
+    // fxSui.setRandomDrops(false);
+    // fxSui.setRandomDropsRate(0);
+    // fxSui.setWaveTank(false);
+    // fxSui.setWaveTankRate(0);
+    // fxSui.setWaveTankSpeed(0);
+
     noisePalette1.setPalettePreset(1);
     noisePalette1.setSpeed(3);
     noisePalette1.setScale(10);

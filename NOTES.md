@@ -13,16 +13,65 @@ typing. They can co-exist happily on your system. Using
 It's fine for `uv` because it doesn't pull in any other packages which may
 collide with those provided by Ubuntu.
 
+## Ubuntu
+
 ```bash
 pip install uv --break-system-packages
 git clone https://github.com/FastLED/FastLED
 cd FastLED
-uv pip install fastled
-uv run fastled
+./install
 
-# You should never need to update FastLED, but if you do:
+# You should never need to update fastled, but if you do:
 uv pip install fastled -U
 ```
+
+## Windows
+
+Install the following:
+
+ * [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+   * Accept the default settings during installation.
+
+ * [VS Code](https://code.visualstudio.com/Download)
+   * Accept the default settings during installation. You may want to select add Desktop Icon if you want one.
+
+ * [Git](https://git-scm.com/downloads/win)
+   * You may want to enable "Check daily for updates".
+
+ * [Astral 'uv'](https://github.com/astral-sh/uv)
+   * To install it, open a Powershell from your Start menu and paste this:
+
+     `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
+
+### Video
+Perhaps useful for screenshots.
+ * [46MiB H.264](https://st4vs.net/Win11_FastLED4_install.mp4), browser compatible.
+ * [187MiB "lossless" AV1](https://st4vs.net/Win11_FastLED4_install.mkv), 4:2:0 sub-sampled. I can't get OBS to record 4:4:4 using *any* codec.
+
+Video: show how to find documentation.
+
+Video: show how to find examples.
+
+Video: approach Scott Marley
+
+## Both Windows and Linux
+
+pio ext
+** TODO **
+clone FastLED
+
+```bash
+cd FastLED
+./install
+```
+ * `uv venv`
+ * `uv run fastled` (and Ctrl-C to exit it)
+
+
+
+
+<br><br><br><br><br><br>
+<hr>
 
 # TODOs
 
@@ -42,17 +91,36 @@ Backtrace: 0x40377216:0x3fcae310 0x4037e601:0x3fcae330 0x40385071:0x3fcae350 0x4
 ```
 
 
-## FastLEd debug macros
+## FastLED debug macros
 
 `FASTLED_DBG("Failed to write frame data, wrote " << bytes_written << " bytes");`
 
 
-## Detect FastLED for WebAssembly (WASM)
-`#if defined(__EMSCRIPTEN__)`
+#### Detect FastLED for WebAssembly (WASM)
+```cpp
+#if defined(__EMSCRIPTEN__)
+// compiling inside WebAssembly (WASM)
+#endif
+```
 
 
-// Zack's String replacement.
-// Not direct replacement, but portable and the best in class for embedded.
-#include <fl/str.h> 
+#### Zack's String replacement.
+ Not direct replacement, but portable and the best in class for embedded.
+
+```cpp
+#include <fl/str.h>
 #typedef fl::Str String;
+```
 
+#### Ongoing tasks
+/r/FastLED subscribers over time.
+[Graphs, which appear to be accurate](https://reddstats.com/subreddit/FastLED)
+even after the Reddit's 2024 API clampdown. Refresh
+[archive.org](https://web.archive.org/web/20250117020022/https://reddstats.com/subreddit/FastLED)
+too.
+
+| Date       | Subscribers  | Change in 2024 |
+|------------|--------------|----------------|
+| 2024-01-01 | 16,086       |                |
+| 2025-01-01 | 18,307       | +2,221         |
+| 2025-01-17 | 18,441       |                |
