@@ -18,6 +18,8 @@
 #include "fxSui.hpp"
 #include "preferences.hpp"
 #include "radar.hpp"
+
+// #define TELEMETRYSERIALONLY
 #include "telemetry.hpp"
 Telemetry telemetry;
 

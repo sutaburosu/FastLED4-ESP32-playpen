@@ -2,10 +2,12 @@
 
 #include "preferences.hpp"
 #include <deque>
-#include <lwip/netdb.h>
-#include <lwip/sockets.h>
 #include <map>
 #include <time.h>
+#if !defined(TELEMETRYSERIALONLY)
+#include <lwip/netdb.h>
+#include <lwip/sockets.h>
+#endif
 
 // Return a String representing the current time
 String timeString() {
@@ -58,10 +60,12 @@ class Telemetry {
     std::deque<String> udpQueue;
     std::deque<Log> logQueue;
 
+#if !defined(TELEMETRYSERIALONLY)
     const int udpMaxPayload = 1024; // max payload size for UDP telemetry
     int udpSocket = -1;             // a socket for sending UDP telemetry
     struct sockaddr_in udpSockAddr; // the destination address for UDP telemetry
     uint32_t udpSendMs = 0;         // when the last UDP telemetry was sent
+#endif
 
     void sanitiseValue(String &value);
     bool coalesceChanges(uint32_t minMs = 200);
@@ -128,12 +132,15 @@ bool Telemetry::coalesceChanges(uint32_t minMs) {
             report += "|" + td.teleplot;
         report += "\n";
 
-        if (flags.udpTelemetry)
-            udpReports += report;
         if (flags.serialTelemetry && !td.udpOnly)
             serialReports += ">" + report;
+#if !defined(TELEMETRYSERIALONLY)
+        if (flags.udpTelemetry)
+            udpReports += report;
         if (udpReports.length() >= udpMaxPayload)
-            break;
+            udpQueue.push_back(udpReports), udpReports = "";
+
+#endif
     }
 
     if (udpReports.length())
@@ -196,6 +203,10 @@ void Telemetry::sendSerial() {
 }
 
 void Telemetry::sendUDP(uint32_t minMs) {
+#if defined(TELEMETRYSERIALONLY)
+    udpQueue.clear();
+    return;
+#else
     if (0 == udpQueue.size())
         return;
 
@@ -304,6 +315,7 @@ void Telemetry::sendUDP(uint32_t minMs) {
             udpBytes = udpPackets = 0;
         }
     }
+#endif
 }
 
 void Telemetry::begin() {
