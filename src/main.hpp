@@ -19,6 +19,8 @@
 #include "preferences.hpp"
 #include "radar.hpp"
 #include "telemetry.hpp"
+Telemetry telemetry;
+
 #include "web_pages.hpp"
 #include "wifi.hpp"
 
